@@ -122,6 +122,49 @@ describe("llmProvider.ts", () => {
       expect(headers.Authorization).toBeUndefined();
     });
 
+    it("[P0] Anthropic 5.5 世代：不送 temperature，Haiku 關閉思考、Sonnet 用 between_tools，effort 為 low", () => {
+      const withTemperature: LlmChatRequest = { ...BASE_REQUEST, temperature: 0.1 };
+
+      const haiku = JSON.parse(
+        buildFetchParams(
+          "anthropic",
+          { ...withTemperature, model: "claude-haiku-5-5" },
+          TEST_API_KEY,
+        ).init.body as string,
+      );
+      expect(haiku.temperature).toBeUndefined();
+      expect(haiku.thinking).toEqual({ type: "disabled" });
+      expect(haiku.output_config).toEqual({ effort: "low" });
+
+      const sonnet = JSON.parse(
+        buildFetchParams(
+          "anthropic",
+          { ...withTemperature, model: "claude-sonnet-5-5" },
+          TEST_API_KEY,
+        ).init.body as string,
+      );
+      expect(sonnet.temperature).toBeUndefined();
+      expect(sonnet.thinking).toEqual({ type: "between_tools" });
+      expect(sonnet.output_config).toEqual({ effort: "low" });
+    });
+
+    it("[P0] Anthropic 舊模型（Haiku 4.5）：仍送 temperature，不帶 thinking / output_config", () => {
+      const body = JSON.parse(
+        buildFetchParams(
+          "anthropic",
+          {
+            ...BASE_REQUEST,
+            model: "claude-haiku-4-5-20251001",
+            temperature: 0.1,
+          },
+          TEST_API_KEY,
+        ).init.body as string,
+      );
+      expect(body.temperature).toBe(0.1);
+      expect(body.thinking).toBeUndefined();
+      expect(body.output_config).toBeUndefined();
+    });
+
     it("[P0] Anthropic：system message 提取到頂層", () => {
       const { init } = buildFetchParams("anthropic", BASE_REQUEST, TEST_API_KEY);
       const body = JSON.parse(init.body as string);

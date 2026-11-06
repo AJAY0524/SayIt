@@ -12,6 +12,8 @@ export type LlmModelId =
   | "openai/gpt-oss-20b"
   | "gpt-5.6-luna"
   | "gpt-5.4-nano"
+  | "claude-haiku-5-5"
+  | "claude-sonnet-5-5"
   | "claude-haiku-4-5-20251001"
   | "gemini-3.5-flash"
   | "gemini-3.1-flash-lite";
@@ -185,17 +187,45 @@ export const LLM_MODEL_LIST: LlmModelConfig[] = [
   },
   // ── Anthropic（付費）──
   {
+    // 提示 ≤100K token 的價格；5.5 世代不接受 temperature，且預設啟用思考
+    // （請求組裝見 llmProvider.ts 的 buildAnthropicFetchParams）
+    id: "claude-haiku-5-5",
+    providerId: "anthropic",
+    freeTier: "none",
+    displayName: "Claude Haiku 5.5",
+    badgeKey: "settings.modelBadge.fastCheap",
+    speedTps: 0,
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.5,
+    freeQuotaRpd: 0,
+    freeQuotaTpd: 0,
+    isDefault: true,
+  },
+  {
+    id: "claude-sonnet-5-5",
+    providerId: "anthropic",
+    freeTier: "none",
+    displayName: "Claude Sonnet 5.5",
+    badgeKey: "settings.modelBadge.premium",
+    speedTps: 0,
+    inputCostPerMillion: 2.0,
+    outputCostPerMillion: 10.0,
+    freeQuotaRpd: 0,
+    freeQuotaTpd: 0,
+    isDefault: false,
+  },
+  {
     id: "claude-haiku-4-5-20251001",
     providerId: "anthropic",
     freeTier: "none",
     displayName: "Claude Haiku 4.5",
-    badgeKey: "settings.modelBadge.premium",
+    badgeKey: "settings.modelBadge.stableCostly",
     speedTps: 0,
     inputCostPerMillion: 1.0,
     outputCostPerMillion: 5.0,
     freeQuotaRpd: 0,
     freeQuotaTpd: 0,
-    isDefault: true,
+    isDefault: false,
   },
 ];
 

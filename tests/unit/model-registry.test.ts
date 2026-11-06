@@ -17,6 +17,8 @@ describe("modelRegistry — 免費專案可用性標示（gh-71）", () => {
     "gemini-3.1-flash-lite": "full",
     "gpt-5.6-luna": "none",
     "gpt-5.4-nano": "none",
+    "claude-haiku-5-5": "none",
+    "claude-sonnet-5-5": "none",
     "claude-haiku-4-5-20251001": "none",
   };
 

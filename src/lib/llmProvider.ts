@@ -179,6 +179,10 @@ function buildOpenAiCompatibleFetchParams(
   };
 }
 
+function isClaude55Model(model: string): boolean {
+  return model === "claude-haiku-5-5" || model === "claude-sonnet-5-5";
+}
+
 function buildAnthropicFetchParams(
   url: string,
   request: LlmChatRequest,
@@ -204,7 +208,15 @@ function buildAnthropicFetchParams(
     max_tokens: request.maxTokens ?? getDefaultMaxTokens("anthropic"),
   };
   if (systemPrompt) body.system = systemPrompt;
-  if (request.temperature !== undefined) {
+  if (isClaude55Model(request.model)) {
+    // 5.5 世代：非預設的 temperature 會回 400（"`temperature` is deprecated"），一律不送；
+    // 預設啟用思考會拖慢速度與費用，文字整理不需要，改為關閉並使用最低 effort。
+    // Haiku 5.5 可用 disabled；Sonnet 5.5 的 disabled 會回 400，改用 between_tools
+    body.thinking = {
+      type: request.model === "claude-sonnet-5-5" ? "between_tools" : "disabled",
+    };
+    body.output_config = { effort: "low" };
+  } else if (request.temperature !== undefined) {
     body.temperature = request.temperature;
   }
 
