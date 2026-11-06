@@ -126,3 +126,17 @@ Codex 不會依 `paths` 自動載入 rules，派工時把相關那檔路徑寫�
 ## Subagent
 
 - **tauri-reviewer** — 審查 Rust↔Vue IPC 一致性（Command 註冊、Event 名稱、Payload 型別）
+
+## Agent skills
+
+### Issue tracker
+
+票開在 fork `AJAY0524/SayIt` 的 GitHub Issues（`gh` 一律帶 `-R AJAY0524/SayIt`，絕不寫入上游 `chenjackle45/SayIt`）。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+採用預設五個標籤：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+single-context：根目錄 `GLOSSARY.md` + 扁平命名 ADR `docs/adr-<slug>.md`。See `docs/agents/domain.md`.
