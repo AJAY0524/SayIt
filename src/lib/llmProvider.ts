@@ -215,6 +215,8 @@ function buildAnthropicFetchParams(
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        // App 視窗送出的請求帶有 Origin，Anthropic 要求此標頭，否則回 401
+        "anthropic-dangerous-direct-browser-access": "true",
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
