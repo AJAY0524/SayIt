@@ -7,8 +7,8 @@
 ## 0. 結論先講
 
 - **FoundationModels 是純 Swift 框架，沒有 Objective-C 標頭**，所以 `objc2` 系列不可行（沒有可綁定的 ObjC 介面，`objc2` 也沒有對應 crate）。
-- **建議方案：自己寫一個小型 Swift Package（靜態庫），以 `@_cdecl` 匯出 C ABI（含 callback 與取消），用 `swift-rs` 的 `SwiftLinker` 負責編譯與連結；部署目標維持 app 的最低系統版本，並以 `#available(macOS 26.0, *)` 把所有 FoundationModels 呼叫包起來。** 本機實測此做法在 CLT-only 環境能編出 arm64 與 x86_64，框架被自動 weak link，並可成功生成與取消。
-- 現成 crate（`fm-rs`、`foundation-models`、`afmize`）可當範本，但**不建議直接依賴**：它們的 Swift 部分以 macOS 26 為部署目標，會變成強連結（見 §3），不符合 SayIt「macOS 26 以下仍須能啟動」的要求。
+- **建議方案：自己寫一個小型 Swift Package（靜態函式庫），以 `@_cdecl` 匯出 C ABI（含 callback 與取消），用 `swift-rs` 的 `SwiftLinker` 負責編譯與連結；部署目標維持 app 的最低系統版本，並以 `#available(macOS 26.0, *)` 把所有 FoundationModels 呼叫包起來。** 本機實測此做法在 CLT-only 環境能編出 arm64 與 x86_64，框架被自動 weak link，並可成功生成與取消。
+- 現成 crate（`fm-rs`、`foundation-models`、`afmize`）可當範本，但**不建議直接相依**：它們的 Swift 部分以 macOS 26 為部署目標，會變成強連結（見 §3），不符合 SayIt「macOS 26 以下仍須能啟動」的要求。
 - 本機 on-device 模型**不需要額外 entitlement**（實測 ad-hoc + hardened runtime 仍可執行）；只有 Private Cloud Compute 需要 Apple 發放的受管 entitlement。
 
 ## 1. 本機環境與 CI 環境事實
@@ -26,7 +26,7 @@
 
 CLT-only 能否編譯（實測）：
 - `swiftc ... import FoundationModels` 可編譯、可執行，`SystemLanguageModel.default.availability` 回 `available`，`respond(to:)` 回出文字。
-- `swift build -c release --triple arm64-apple-macosx13.0` 與 `--triple x86_64-apple-macosx13.0`（SwiftPM 靜態庫，tools-version 5.9）皆 `Build complete`，只有一則無害的 `ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found`。
+- `swift build -c release --triple arm64-apple-macosx13.0` 與 `--triple x86_64-apple-macosx13.0`（SwiftPM 靜態函式庫，tools-version 5.9）皆 `Build complete`，只有一則無害的 `ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found`。
 - `FoundationModels.framework` 在 SDK 內只有 `Modules/FoundationModels.swiftmodule`、`.swiftcrossimport` 與 `.tbd`，**沒有 `Headers/`**（`ls .../FoundationModels.framework/Headers` 回 `No such file or directory`）。
 
 ### 1.2 GitHub Actions `macos-latest`
@@ -46,7 +46,7 @@ CLT-only 能否編譯（實測）：
 ### 2.1 objc2 綁定：不可行
 
 - FoundationModels 無 `Headers/`（§1.1 實測），公開 API 以 Swift 語言特性（`async`、macro、泛型、result builder）提供，沒有 ObjC 執行階段介面可動態呼叫。
-- `objc2` 倉庫 `framework-crates/` 目錄下只有 `objc2-av-foundation`、`objc2-core-foundation`、`objc2-foundation`、`objc2-model-io`、`objc2-security-foundation`（`gh api repos/madsmtm/objc2/contents/framework-crates` 過濾 foundation/model），**沒有 FoundationModels**；crates.io 搜尋 `objc2-foundation-models` 結果為 0 筆。
+- `objc2` 儲存庫 `framework-crates/` 目錄下只有 `objc2-av-foundation`、`objc2-core-foundation`、`objc2-foundation`、`objc2-model-io`、`objc2-security-foundation`（`gh api repos/madsmtm/objc2/contents/framework-crates` 過濾 foundation/model），**沒有 FoundationModels**；crates.io 搜尋 `objc2-foundation-models` 結果為 0 筆。
 - 結論：排除。
 
 ### 2.2 swift-rs
@@ -57,7 +57,7 @@ CLT-only 能否編譯（實測）：
 - 作法：`build.rs` 用 `SwiftLinker::new("<macOS 最低版本>").with_package(name, path).link()`；Swift 端以 `@_cdecl` 匯出；Rust 端以 `swift!` 巨集或自行 `extern "C"` 宣告。README 說明 `SwiftLinker::new` 的版本要與 `Package.swift` 的平台一致。
 - 實作細節（讀 `build.rs`）：執行 `swift build --sdk ... -c <config> --arch <arch>`，並以 `-Xswiftc -target <arch>-apple-macos<ver>` 覆寫目標；Rust target 為 `x86_64` 時對應 `x86_64-apple-macos...`，所以 **x86_64-apple-darwin 受支援**。
 - 與 Tauri：README 提到 Tauri 的 `dyld: Library not loaded: @rpath/libswiftCore.dylib` 問題，解法是把 Tauri 最低系統版本設為 10.15 以上。Tauri 設定 `bundle.macOS.minimumSystemVersion` 預設為 `10.13`（<https://v2.tauri.app/reference/config/>），而 SayIt 的 `tauri.conf.json` 目前**沒有**設定它，所以採用本方案時要加上（建議至少 `12.0`，見 §3）。
-- 限制：`swift!` 巨集只便於傳數字、布林、字串與資料；README 沒有涵蓋 async 與 callback。**對我們不是問題**：我們用純 C ABI（函式指標 callback + `i64` handle），不依賴 `swift!` 的型別。
+- 限制：`swift!` 巨集只便於傳數字、布林、字串與資料；README 沒有涵蓋 async 與 callback。**對我們不是問題**：我們用純 C ABI（函式指標 callback + `i64` handle），不仰賴 `swift!` 的型別。
 - Xcode 27 相容性：`swift-rs` 1.0.9 的 commit「Make the @_cdecl exports in lib.swift public so Xcode 27 release builds link」，以及 `build.rs` 內註解「Xcode 27's SwiftPM internalizes @_cdecl exports in static products ... Promote them back to global」，並有 `globalize_cdecl_symbols` 處理。**注意**：我們的 `@_cdecl` 函式務必標 `public`（本機實測 `public` 後 `nm` 顯示為 `T`，全域符號）。
 - 本機 `swift build` 約 50–60 秒/架構（CLT，release，含 FoundationModels 的小型套件）；CI 首次建置需要考慮快取（`swatinem/rust-cache` 不快取 SwiftPM 的 scratch 目錄，未驗證，可另加 `actions/cache`）。
 
@@ -81,13 +81,13 @@ CLT-only 能否編譯（實測）：
 - 優點：Swift 當機不會拖垮主程式；Swift 工具鏈與 Rust 連結完全解耦（避開 rpath、`libswiftCore`、Xcode 27 `@_cdecl` 等問題）；框架缺失時 sidecar 自己印出 `unavailable` 即可。
 - 缺點：每次生成要啟動行程（或常駐 + 自訂 stdin/stdout 協定，要設計框架與逾時）；雙架構各打包一份；CI 要多一道「先編 sidecar 再重新命名」；簽章／公證面積變大；語音輸入的熱路徑（錄完立刻潤稿）多一層 IPC。
 
-### 2.5 其他有實際開源範例的做法（以 swift-rs 或 swiftc 靜態庫 + C ABI 為底）
+### 2.5 其他有實際開源範例的做法（以 swift-rs 或 swiftc 靜態函式庫 + C ABI 為底）
 
 全部讀自 crates.io API 與 GitHub 原始碼：
 
 | 專案 | 授權 / 規模 | 做法 | 與 SayIt 的相容性 |
 |---|---|---|---|
-| `fm-rs`（<https://github.com/blacktop/fm-rs>） | MIT，24 stars，crates.io 0.3.0（2026-08-16） | `build.rs` 呼叫 `swiftc` 編 Swift FFI 靜態庫，`cargo:rustc-link-lib=framework=FoundationModels`；README 要求 macOS 26+、Apple Silicon；有 session 取消 handle；`build.rs` 對非 aarch64 目標直接報錯「fm-rs requires Apple Intelligence hardware; unsupported target」 | **x86_64-apple-darwin 目標會建置失敗**，不能直接依賴 |
+| `fm-rs`（<https://github.com/blacktop/fm-rs>） | MIT，24 stars，crates.io 0.3.0（2026-08-16） | `build.rs` 呼叫 `swiftc` 編 Swift FFI 靜態函式庫，`cargo:rustc-link-lib=framework=FoundationModels`；README 要求 macOS 26+、Apple Silicon；有 session 取消 handle；`build.rs` 對非 aarch64 目標直接報錯「fm-rs requires Apple Intelligence hardware; unsupported target」 | **x86_64-apple-darwin 目標會建置失敗**，不能直接相依 |
 | `foundation-models`（<https://github.com/doom-fish/foundation-models-rs>） | Apache-2.0，2 stars，crates.io 0.12.2（2026-10-26） | `build.rs` 呼叫 `swift build --triple <arch>-apple-macosx`（支援 x86_64 與 aarch64），`Package.swift` 設 `.macOS("26.0")`，連結 `libFoundationModelsBridge.a`；README：「Dropping a future cancels its generation」；README 要求 macOS 26+、Apple Silicon | 部署目標 26 → 強連結（§3 實測），舊系統會啟動失敗；x86_64 會編（tuple 支援） |
 | `afmize`（<https://github.com/RyanGarber/afmize>） | 無授權檔（GitHub API `license: null`），1 star，2026-07 建立 | Swift 套件 + C ABI（`afmize_stream_start/cancel`、callback 逐事件回 JSON），README 的 Rust 段落使用 swift-rs `SwiftLinker::new("26.0")`；**README 沒有提到 Tauri**（這與搜尋摘要的說法不同，以原文為準） | `Package.swift` 為 `.macOS(.v26)` 且需要 Xcode 27 / tools-version 6.4：CI 無法建置、<26 會強連結；僅可當 C ABI 設計參考 |
 | `fm-bindings` | 搜尋結果提及（<https://docs.rs/crate/fm-bindings/latest/source/README.md>） | 同樣是 `build.rs` 編 Swift bridge | 未深入讀原始碼，未驗證 |
@@ -105,12 +105,12 @@ CLT-only 能否編譯（實測）：
 | 部署目標 13.0，arm64 | `swiftc -emit-library -static ... -target arm64-apple-macos13.0`，C 主程式 `-target arm64-apple-macos13.0` 連結 | `otool -L` 顯示 `.../FoundationModels (... , weak)`；`vtool` `minos 13.0`；執行輸出 `available=1`、`cb kind=0 text=Hello, friend.` |
 | 部署目標 13.0，x86_64 | 同上 `x86_64-apple-macos13.0` | 編譯與連結成功（`Mach-O 64-bit executable x86_64`），`FoundationModels` 同樣為 `weak`。**未在 Intel Mac 上實際執行**（無此硬體），未驗證 |
 | 部署目標 26.0 | `-target arm64-apple-macos26.0` | `otool -L` **沒有** `weak` 標記（強連結），`minos 26.0` |
-| 26.0 靜態庫連進 13.0 主程式 | 混合 | 產生 `ld: warning: object file ... was built for newer 'macOS' version (26.0) than being linked (13.0)`，且框架仍為**強連結** |
+| 26.0 靜態函式庫連進 13.0 主程式 | 混合 | 產生 `ld: warning: object file ... was built for newer 'macOS' version (26.0) than being linked (13.0)`，且框架仍為**強連結** |
 | 額外加 `-framework FoundationModels` | 於 13.0 目標 | 仍為 `weak`（連結器依 SDK 的 `.tbd` 可用版本資訊自動 weak） |
 | 取消 | `./t_arm c`（啟動後 20 ms 呼叫 cancel） | `cb kind=2 text=cancelled`，沒有 crash |
 
 結論：
-1. **Swift 靜態庫的部署目標必須是 app 的最低系統版本（不是 26）**，框架才會被連結器標為 weak；呼叫端以 `#available(macOS 26.0, *)` 擋掉。swift-rs 的 `SwiftLinker::new(<ver>)` 與 `Package.swift` 的 `platforms` 都要照此設定。
+1. **Swift 靜態函式庫的部署目標必須是 app 的最低系統版本（不是 26）**，框架才會被連結器標為 weak；呼叫端以 `#available(macOS 26.0, *)` 擋掉。swift-rs 的 `SwiftLinker::new(<ver>)` 與 `Package.swift` 的 `platforms` 都要照此設定。
 2. 第三方 crate 若把 Swift 部分編成 macOS 26 目標（`foundation-models-rs` 的 `Package.swift` 是 `.macOS("26.0")`；`afmize` 是 `.macOS(.v26)`），依上面的實測會變強連結，推論在 macOS 25 以下 dyld 會因找不到框架而讓整個 app 啟動失敗。**此推論來自 `otool -L` 的 weak 標記，未在真正的 macOS < 26 機器上驗證**（本機是 macOS 27.2）。
 3. x86_64-apple-darwin：自寫 Swift 套件可編；在 Intel 上 Apple Intelligence 不支援（`foundation-models-rs` README 寫「Apple Silicon」），執行期應得到 `unavailable`（`deviceNotEligible`），**未實測**。`fm-rs` 的 `build.rs` 會直接拒絕非 aarch64 目標，故不能直接用。
 4. 實務上 Intel 版與舊 macOS 一律走 `sayit_fm_available() != 1` → 前端隱藏／停用「Apple Intelligence」選項。
@@ -125,8 +125,8 @@ CLT-only 能否編譯（實測）：
   - SayIt 現有 `Entitlements.plist` 只有 `com.apple.security.device.audio-input` 與 `com.apple.security.automation.apple-events`，**不需要新增**。
 - **PCC**（macOS 27+）需 Apple 發放受管 entitlement 與 provisioning profile，且 Apple 設有資格條件（App Store Small Business Program 等，見 fm-rs README 引用 <https://developer.apple.com/private-cloud-compute/>）。與 Developer ID 發行的 SayIt 流程不合，**不建議納入範圍**。
 - **Developer ID 簽章／公證**：
-  - 靜態庫方案：Swift 程式碼最終在主執行檔內，不增加簽章對象，沒有額外步驟；Tauri 簽章流程（`APPLE_CERTIFICATE`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID` 等，<https://v2.tauri.app/distribute/sign/macos/>）不變。公證不會因連結 FoundationModels 而失敗的證據：**未驗證**（本機沒有 Developer ID 憑證，沒做公證）。
-  - Swift runtime：靜態庫連結後，主執行檔依賴 `/usr/lib/swift/libswiftCore.dylib` 等系統內建 Swift runtime（`otool -L t_arm` 顯示 `/usr/lib/swift/libswift_Concurrency.dylib`），用 `-Wl,-rpath,/usr/lib/swift`（探針連結時使用）。swift-rs 的 README 因此建議 Tauri 最低版本設 10.15+（來源 §2.2）；各 macOS 版本實際內建的 Swift runtime 版本：未驗證。
+  - 靜態函式庫方案：Swift 程式碼最終在主執行檔內，不增加簽章對象，沒有額外步驟；Tauri 簽章流程（`APPLE_CERTIFICATE`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID` 等，<https://v2.tauri.app/distribute/sign/macos/>）不變。公證不會因連結 FoundationModels 而失敗的證據：**未驗證**（本機沒有 Developer ID 憑證，沒做公證）。
+  - Swift runtime：靜態函式庫連結後，主執行檔相依於 `/usr/lib/swift/libswiftCore.dylib` 等系統內建 Swift runtime（`otool -L t_arm` 顯示 `/usr/lib/swift/libswift_Concurrency.dylib`），用 `-Wl,-rpath,/usr/lib/swift`（探針連結時使用）。swift-rs 的 README 因此建議 Tauri 最低版本設 10.15+（來源 §2.2）；各 macOS 版本實際內建的 Swift runtime 版本：未驗證。
   - Sidecar 方案：巢狀可執行檔需被簽章（hardened runtime）並含入公證；見 §2.4，Tauri 文件未明說，**未驗證**。
 
 ## 5. async、取消與錯誤傳遞
@@ -134,8 +134,8 @@ CLT-only 能否編譯（實測）：
 Swift 端：`LanguageModelSession.respond(to:)` 是 `async throws`。本機探針的做法：
 
 - `sayit_fm_start` 建立 `Task`，以 `Int64` id 存進 `[Int64: Task]`（加鎖），立即回傳 id；Task 內 `await session.respond(to:)`，完成時呼叫 C callback。
-- `sayit_fm_cancel(id)` 呼叫 `task.cancel()`；`respond` 結束後以 `Task.checkCancellation()` / `catch is CancellationError` 回報 `kind=2`。實測取消後 callback 收到 `cancelled`。**注意**：實測只證明「取消後 callback 回 cancelled」，不證明模型端運算被中止（我沒有量測 `respond` 在取消時是否提早返回；Apple 文件／探針皆無此資訊）。若需要「立刻放棄結果」，Rust 端用世代編號（generation id）丟棄過期結果即可，不依賴 Swift 端提前返回。
-- 錯誤：Apple 的 `LanguageModelSession.GenerationError` 有 `assetsUnavailable`、`decodingFailure`、`exceededContextWindowSize`、`guardrailViolation`、`rateLimited`、`refusal`、`concurrentRequests`、`unsupportedGuide`、`unsupportedLanguageOrLocale`（<https://developer.apple.com/tutorials/data/documentation/foundationmodels/languagemodelsession/generationerror.json>）。建議在 Swift 端把它們映射成穩定的字串代碼（例如 `exceeded-context-window`、`guardrail`、`unsupported-language`），以 JSON 或 `(kind, code, message)` 經 callback 傳給 Rust。`afmize` 的錯誤事件格式（`code` + `message`，且錯誤後必有 `finish`）與 `foundation-models-rs`「dropping a future cancels its generation」可當設計參考。
+- `sayit_fm_cancel(id)` 呼叫 `task.cancel()`；`respond` 結束後以 `Task.checkCancellation()` / `catch is CancellationError` 回報 `kind=2`。實測取消後 callback 收到 `cancelled`。**注意**：實測只證明「取消後 callback 回 cancelled」，不證明模型端運算被中止（我沒有量測 `respond` 在取消時是否提早返回；Apple 文件／探針皆無此資訊）。若需要「立刻放棄結果」，Rust 端用世代編號（generation id）丟棄過期結果即可，不仰賴 Swift 端提前返回。
+- 錯誤：Apple 的 `LanguageModelSession.GenerationError` 有 `assetsUnavailable`、`decodingFailure`、`exceededContextWindowSize`、`guardrailViolation`、`rateLimited`、`refusal`、`concurrentRequests`、`unsupportedGuide`、`unsupportedLanguageOrLocale`（<https://developer.apple.com/tutorials/data/documentation/foundationmodels/languagemodelsession/generationerror.json>）。建議在 Swift 端把它們映射成穩定的字串錯誤碼（例如 `exceeded-context-window`、`guardrail`、`unsupported-language`），以 JSON 或 `(kind, code, message)` 經 callback 傳給 Rust。`afmize` 的錯誤事件格式（`code` + `message`，且錯誤後必有 `finish`）與 `foundation-models-rs`「dropping a future cancels its generation」可當設計參考。
 - 同一個 `LanguageModelSession` 同時只能處理一個請求（`concurrentRequests` 錯誤；`foundation-models-rs` README 說明取消後下一個請求會等待收尾）。SayIt 每次潤稿建立新 session 即可避開。
 - `unsupportedLanguageOrLocale`：SayIt 使用者多為繁體中文，需實測模型對 `zh-TW` 的支援，**未驗證**。
 
@@ -148,17 +148,17 @@ Rust 端對應：
 
 | 方案 | x86_64 可編 | <26 可啟動 | 僅 CLT 可編 | CI（Xcode 26.6） | 簽章／公證面積 | async／取消 | 維護成本 |
 |---|---|---|---|---|---|---|---|
-| A. 自寫 Swift 靜態庫 + swift-rs（C ABI，部署目標 = app 最低版） | 是（實測） | 是（weak，`otool -L` 實測；舊 OS 實機未驗證） | 是（實測） | 可（需把 `@_cdecl` 標 `public`；快取需設計） | 不增加 | 自訂：Task + handle，實測可取消 | 低～中（約 100 行 Swift + 約 100 行 Rust） |
+| A. 自寫 Swift 靜態函式庫 + swift-rs（C ABI，部署目標 = app 最低版） | 是（實測） | 是（weak，`otool -L` 實測；舊 OS 實機未驗證） | 是（實測） | 可（需把 `@_cdecl` 標 `public`；快取需設計） | 不增加 | 自訂：Task + handle，實測可取消 | 低～中（約 100 行 Swift + 約 100 行 Rust） |
 | B. swift-bridge | 未驗證 | 取決於 Swift 套件目標，同 A | 未驗證 | 未驗證 | 同 A | 內建 async 橋接，無取消語意 | 中～高（bridge 宣告與產生碼） |
 | C. objc2 | — | — | — | — | — | — | **不可行**（無標頭、無 crate） |
 | D. Sidecar（externalBin） | 是（需各架構一份） | 是（框架缺失只影響 sidecar） | 是 | 需加 sidecar 建置步驟 | 增加巢狀二進位，Tauri 是否自動簽：未驗證 | 行程間協定，kill 或協定取消 | 中（IPC、逾時、重命名、打包） |
-| E. 直接依賴 `fm-rs` | 否（build.rs 拒絕非 aarch64） | 未驗證 | 未驗證 | 未驗證 | 同 A | 有取消 handle | 低，但 x64 不能編 |
-| F. 直接依賴 `foundation-models` | 是（tuple 支援） | 否（部署目標 26 → 強連結，推論） | 未驗證 | 未驗證 | 同 A | drop future 即取消 | 低，但舊 macOS 會無法啟動 |
-| G. 直接依賴 `afmize` | 未驗證 | 否（`.macOS(.v26)`） | 否（需 Xcode 27 / tools 6.4） | 否（runner 無 Xcode 27） | 同 A | stream + cancel | 不適用 |
+| E. 直接相依 `fm-rs` | 否（build.rs 拒絕非 aarch64） | 未驗證 | 未驗證 | 未驗證 | 同 A | 有取消 handle | 低，但 x64 不能編 |
+| F. 直接相依 `foundation-models` | 是（tuple 支援） | 否（部署目標 26 → 強連結，推論） | 未驗證 | 未驗證 | 同 A | drop future 即取消 | 低，但舊 macOS 會無法啟動 |
+| G. 直接相依 `afmize` | 未驗證 | 否（`.macOS(.v26)`） | 否（需 Xcode 27 / tools 6.4） | 否（runner 無 Xcode 27） | 同 A | stream + cancel | 不適用 |
 
 ## 7. 建議
 
-**採方案 A：自寫 Swift 靜態庫 + swift-rs，C ABI 只暴露 3 個函式（availability / start / cancel）。**
+**採方案 A：自寫 Swift 靜態函式庫 + swift-rs，C ABI 只暴露 3 個函式（availability / start / cancel）。**
 
 理由：
 1. 唯一同時滿足「x86_64 仍可編、macOS 26 以下仍可啟動、CI（Xcode 26.6）可建、不增加簽章面積」的做法；現成 crate 都在其中至少一項失敗（§2.5、§3）。

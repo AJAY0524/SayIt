@@ -18,7 +18,7 @@ Accepted。實作拆票由地圖 #2 的最後一張規格票處理。
 
 SayIt 要在「LLM 模型服務」新增 Apple Intelligence 選項。FoundationModels 是純 Swift 框架（無 Objective-C 標頭），Rust 無法直接呼叫，必須自建 Rust↔Swift 橋接。前置研究已有結論：
 
-- #3（`docs/research/apple-intelligence-bridge.md`）：建議自寫 Swift 靜態庫、以 `@_cdecl` 匯出 C ABI；`objc2` 不可行；現成 crate（`fm-rs`、`foundation-models`、`afmize`）各有「Intel 不能編」或「部署目標 26 造成強連結」等問題；sidecar 為備案。
+- #3（`docs/research/apple-intelligence-bridge.md`）：建議自寫 Swift 靜態函式庫、以 `@_cdecl` 匯出 C ABI；`objc2` 不可行；現成 crate（`fm-rs`、`foundation-models`、`afmize`）各有「Intel 不能編」或「部署目標 26 造成強連結」等問題；sidecar 為備案。
 - #4（`docs/research/foundation-models-api.md`）：最低 macOS 26.0；`contextSize` 26.x 為 4096、27 實測 8192；`Response.usage`、`LanguageModelError` 僅 macOS 27 SDK 有；支援 zh-TW。
 
 #6 開工前補充了兩點，本票據此處理：
@@ -30,7 +30,7 @@ SayIt 要在「LLM 模型服務」新增 Apple Intelligence 選項。FoundationM
 
 ## 決策
 
-### D1. 橋接方式：自寫 Swift Package（靜態庫）＋ `public @_cdecl` C ABI，直接連進主執行檔
+### D1. 橋接方式：自寫 Swift Package（靜態函式庫）＋ `public @_cdecl` C ABI，直接連進主執行檔
 
 - 不使用 `objc2`、不用現成 FoundationModels crate、不用 sidecar。
 - Swift 端只暴露四個 C 函式：`sayit_fm_availability`、`sayit_fm_generate`（JSON 請求＋單一回呼）、`sayit_fm_cancel`、`sayit_fm_build_info`。回呼契約：每次 `generate` 呼叫**恰好觸發一次**，`kind` 為 0 成功、1 錯誤、2 已取消，payload 為 JSON 字串。
@@ -44,7 +44,7 @@ swift-rs 1.0.9 的 `SwiftLinker` **在本機實際失敗**：`swift build` 成�
 - swift-rs 以 `xcrun xcodebuild -version` 判斷是不是 Xcode 27；本機只有 CLT，`xcodebuild` 不存在（`xcrun: error: unable to find utility "xcodebuild"`），判斷為「否」，於是到舊版路徑 `<build-path>/arm64-apple-macosx/release` 找檔。
 - 但 Swift 6.4 的 `swift build` 預設已是 Swift Build 引擎（`--build-system` 預設 `swiftbuild`），產物在 `<build-path>/out/Products/Release/libSayItFM.a`。
 - 另外從原始碼讀到（**未實測**）：`--arch` 用的是 `std::env::consts::ARCH`（build script 的**主機**架構）而非目標架構；Xcode 27 需要 rustup 的 `llvm-tools` 元件才能還原被內部化的 `@_cdecl` 符號（CI 的 `dtolnay/rust-toolchain@stable` 預設不裝）。
-- `swift-rs 1.0.7` 已是 `Cargo.lock` 的間接相依（tauri、tauri-plugin-log、tauri-utils）；直接依賴 1.0.9 會動到鎖檔，而本 repo 的 hook 對 `Cargo.lock` 是 hard block。
+- `swift-rs 1.0.7` 已是 `Cargo.lock` 的間接相依套件（tauri、tauri-plugin-log、tauri-utils）；直接相依 1.0.9 會動到鎖檔，而本 repo 的 hook 對 `Cargo.lock` 是 hard block。
 
 決策：自寫 `build.rs` 片段，**不新增任何 crate**，作法如下（完整程式碼見探針的 `build.rs`）：
 
@@ -200,14 +200,14 @@ build_info=fm=sdk26 availability=1
 
 | 方案 | 結論 | 理由 |
 |------|------|------|
-| A. 自寫 Swift 靜態庫＋自帶 `build.rs`（**採用**） | 採用 | 唯一同時滿足：Intel 目標可編、macOS 26 以下可啟動（weak）、CLT-only 與 Xcode 皆可建、CI SDK 26.5 可建、不增加簽章面積、不新增 crate |
+| A. 自寫 Swift 靜態函式庫＋自帶 `build.rs`（**採用**） | 採用 | 唯一同時滿足：Intel 目標可編、macOS 26 以下可啟動（weak）、CLT-only 與 Xcode 皆可建、CI SDK 26.5 可建、不增加簽章面積、不新增 crate |
 | A'. 同 A，但用 swift-rs `SwiftLinker` | 否決 | 本機（CLT＋Swift 6.4）實際連結失敗；需要動 `Cargo.lock`；Xcode 27 需 `llvm-tools`；`--arch` 取主機架構（讀原始碼，未實測）。若上游偏好可機械式替換 |
 | B. swift-bridge | 否決 | 為「3 個函式＋1 個回呼」引入橋接宣告與產生碼過重；取消非內建概念；CLT／x86_64 下的建置未驗證 |
 | C. objc2 | 不可行 | FoundationModels 無 ObjC 標頭、無對應 crate（#3） |
 | D. sidecar（`externalBin`） | 備案 | 優點是 Swift 當機不拖垮主程式、工具鏈完全解耦；缺點是每個架構一份、巢狀二進位的簽章與公證 Tauri 文件未說明、熱路徑多一層 IPC。介面（availability／generate／cancel）與 Swift 程式碼可原樣重用，只換傳輸層 |
-| E. 直接依賴 `fm-rs` | 否決 | `build.rs` 拒絕非 aarch64 目標，x64 release 會失敗 |
-| F. 直接依賴 `foundation-models` | 否決 | Swift 部分部署目標 26 → 強連結，macOS 25 以下無法啟動（推論，#3） |
-| G. 直接依賴 `afmize` | 否決 | 需要 Xcode 27／tools-version 6.4，CI 無法建置；無授權檔 |
+| E. 直接相依 `fm-rs` | 否決 | `build.rs` 拒絕非 aarch64 目標，x64 release 會失敗 |
+| F. 直接相依 `foundation-models` | 否決 | Swift 部分部署目標 26 → 強連結，macOS 25 以下無法啟動（推論，#3） |
+| G. 直接相依 `afmize` | 否決 | 需要 Xcode 27／tools-version 6.4，CI 無法建置；無授權檔 |
 | H. 最低 macOS 設 26（避開所有相容問題） | 否決 | 等於放棄整個 app 對 macOS 26 以下的使用者，遠超出一個選項的代價 |
 | I. 最低 macOS 12.0＋`-runtime-compatibility-version none` | 備案 | 可行（探針實測），但是為遷就工具鏈的 hack（見 D4） |
 | J. CI 改用有 Xcode 27 的 runner，或鎖 Xcode 版本 | 否決 | runner-images 目前沒有 Xcode 27（#3）；條件編譯已能同時支援兩種 SDK，且 runner 日後升級會自動受益 |
@@ -242,7 +242,7 @@ build_info=fm=sdk26 availability=1
 - **macOS 13～25 實機啟動**：weak link 僅由 `otool -L` 推論；本機是 macOS 27.2。
 - **GitHub Actions 實跑**：`macos-latest` 上的 `build.rs`、快取效果、`swatinem/rust-cache` 是否快取 `$OUT_DIR` 均未驗證；Swift 6.3 編譯器（Xcode 26.6）編譯 `Bridge.swift` 也未驗證（本機只有 Swift 6.4.2；已用 SDK 26.5 的 `.swiftinterface` 驗證 API 層面）。
 - **Developer ID 簽章與公證**：本機無憑證，未做。
-- **完整 Xcode 27**：`--show-bin-path` 設計上與產物配置無關，但只在 CLT 6.4.2 實測。
+- **完整 Xcode 27**：`--show-bin-path` 設計上與產物結構無關，但只在 CLT 6.4.2 實測。
 - **`tauri build` 對 `MACOSX_DEPLOYMENT_TARGET` 的實際傳遞**：僅讀 `tauri-build` 原始碼。
 - **swift-rs 在 CI（Xcode 26.6）是否可用**：未驗證（本 ADR 沒有採用它，但上游若偏好需自行驗證）。
 - 三種 `unavailable` 原因的實機重現（沿用 #4 的未驗證項）、`@Generable` 巨集路徑、繁簡偏向的統計結論。

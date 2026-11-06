@@ -97,7 +97,7 @@ Apple Intelligence 的判斷順序（全在 Rust `availability` 內，前端不�
 | `src/stores/useVoiceFlowStore.ts:1422`、`:1442` | ① 異常重試 | 傳 `llmApiKey` | 傳 `LlmCredential`；Apple 不重試（§5） |
 | `src/stores/useVoiceFlowStore.ts:1602-1614` | ② 選取文字改寫 | 同上 | 同上；未就緒走既有 `editFailed` |
 | `src/stores/useVoiceFlowStore.ts:1759-1767` | ① HUD 重送後整理 | 同上 | 同上 |
-| `src/stores/useVoiceFlowStore.ts:838-840` | ④ 智慧字典學習 | `getLlmApiKey()` 有值才啟動 | 用同一流程中最近一次 `llmReadiness`（① 已刷新過），就緒才啟動 |
+| `src/stores/useVoiceFlowStore.ts:551-555`、`:838-840` | ④ 智慧字典學習 | `getLlmApiKey()` 有值才啟動；內部函式 `startCorrectionDetectionFlow(pastedText, transcriptionId, apiKey: string)` 把 key 傳給 `analyzeCorrections` | 用同一流程中最近一次 `llmReadiness`（① 已刷新過），就緒才啟動；`startCorrectionDetectionFlow` 參數改為 `credential: LlmCredential` |
 | `src/stores/useHistoryStore.ts:851-864` | ③ 歷史重新整理 | `refreshLlmApiKey` → `if (!llmApiKey)` | `refreshLlmReadiness()` |
 | `src/views/SettingsView.vue:1571-1572` | ⑤ 連線測試 | `testLlmConnection(modelId, getLlmApiKey())`、`:disabled="!hasLlmApiKey"` | 傳 `getLlmCredential()`、`:disabled="!isLlmReady"` |
 | `src/views/SettingsView.vue:1585` | 模型選單 | `v-if="groq \|\| hasLlmApiKey"` | Apple 改顯示固定唯讀模型欄（demo），雲端照舊 |
@@ -158,6 +158,7 @@ Apple Intelligence 的判斷順序（全在 Rust `availability` 內，前端不�
 - 卡片底部琥珀色降級區（demo `degBlock`）；歷史紀錄頁「重新整理」按鈕旁（tooltip）加同 `degraded.historyReEnhance` 文案，僅在 Apple 被選中時顯示。
 - `settings.provider.description` 補一句 Apple Intelligence（「Apple Intelligence 在 Mac 上本機處理、免費」，五語系）。
 - Dashboard：Apple 的 `freeQuotaTpd` 為 0，**不顯示 LLM 額度條**（`DashboardView.vue:105` 會除以 0）；單筆用量 token 為 null 時顯示「—」。
+- Dashboard：`DashboardView.vue:50-54` 的 `isPaidLlmProvider` 目前是「不是 groq／gemini 就算計費」，選 Apple 會被誤判成計費方案；改成排除 `apple`（或改依 provider 是否為雲端且非免費額度判斷）。歸 T3 #16。
 - UI 一律 shadcn-vue＋語意色彩變數（`.claude/rules/ui.md`）；琥珀色用既有 warning 類語意變數，沒有就依 `ui.md` 新增 token，不用 Tailwind 原生色。
 
 ## 8. 用量統計
@@ -187,7 +188,12 @@ zh-TW 文案照 demo README 與決策檔；其他四語系由實作票翻譯。
 
 - `tauri.conf.json` `bundle.macOS.minimumSystemVersion: "13.0"`（🟡 hook 警告檔，必要變更）、`Package.swift` `platforms`、`build.rs` `MACOS_MIN`、`src-tauri/.cargo/config.toml` `[env] MACOSX_DEPLOYMENT_TARGET = "13.0"` 四處一致。
 - 影響：**整個 app**（不只本選項）無法在 macOS 12 以下啟動；現行宣告 10.13（arm64 實際 11.0）。Tauri updater 不能依系統版本過濾，macOS 11／12 使用者自動更新後會被擋在啟動之外。
-- 處置（代決）：接受。CHANGELOG、更新摘要、README 系統需求明寫「需要 macOS 13 以上」，並在 release notes 附上最後一個支援 macOS 11／12 的版本下載連結。**不做**「先發一版 updater 防護再升級」的兩段式發版（受影響族群小、維護成本高；若 AJ 不同意，改列 T6 前置）。
+- 處置（代決，2026-11-06 依 AGY 文件審查修正為兩段式）：
+  1. **前置維護版（T0 #20）**：`checkForAppUpdate()` 讀 `latest.json` 的自訂欄位 `minimumSystemVersion`，目前 macOS 版本低於它就視為「已是最新」、不下載；release workflow 能寫入此欄位。這一版要**先發布**，讓既有使用者先換上會擋更新的版本。
+  2. **13.0 版（T6 #19）**：`latest.json` 填 `minimumSystemVersion: "13.0"`；macOS 11／12 使用者停在維護版，不會被更新到打不開的版本。
+  3. CHANGELOG、更新摘要、README 系統需求明寫「需要 macOS 13 以上」，release notes 附維護版的下載連結，給 macOS 11／12 使用者手動取用。
+  - 未驗證：Tauri v2 updater 的 `Update.rawJson` 能讀到自訂欄位；讀不到時維護版改為寫死「macOS < 13 一律不自動更新」。
+  - 仍有風險：沒裝到維護版、直接從更舊版本更新的使用者不受保護（他們的 updater 沒有這個檢查）；在 release notes 與 README 說明。
 
 ## 11. 測試策略
 
@@ -245,9 +251,10 @@ zh-TW 文案照 demo README 與決策檔；其他四語系由實作票翻譯。
 
 | 票 | 標題 | 被誰阻擋 | 標籤 |
 |---|---|---|---|
+| T0 #20 | 前置維護版：自動更新依 macOS 版本擋下不相容的新版 | — | ready-for-agent |
 | T1 #14 | Apple Intelligence Swift 橋接、三個 command 與最低 macOS 13.0 | — | ready-for-agent |
 | T2 #15 | LLM 就緒閘門與 Apple 轉接層（連線測試可用） | T1 #14 | ready-for-agent |
 | T3 #16 | 設定頁 Apple Intelligence 卡片、就緒狀態列與五語系 | T2 #15 | ready-for-agent |
 | T4 #17 | 文字整理與歷史重新整理的 Apple 降級 | T2 #15 | ready-for-agent |
 | T5 #18 | 選取文字改寫降級與智慧字典學習支援 | T2 #15 | ready-for-agent |
-| T6 #19 | 發版準備：CHANGELOG、更新摘要、README 與 release 實跑 | T3 #16、T4 #17、T5 #18 | ready-for-human |
+| T6 #19 | 發版準備：CHANGELOG、更新摘要、README 與 release 實跑 | T0 #20（須已發布）、T3 #16、T4 #17、T5 #18 | ready-for-human |
