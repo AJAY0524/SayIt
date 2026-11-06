@@ -157,6 +157,7 @@ describe("enhancer.ts", () => {
       const headers = callArgs[1].headers;
       expect(headers["x-api-key"]).toBe(TEST_API_KEY);
       expect(headers["anthropic-version"]).toBe("2023-06-01");
+      expect(headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
       expect(headers.Authorization).toBeUndefined();
 
       const body = JSON.parse(callArgs[1].body);
