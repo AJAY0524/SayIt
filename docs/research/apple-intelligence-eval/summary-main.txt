@@ -1,0 +1,47 @@
+P1: n=6 ok=6; lat avg=128 min=117 max=166ms; tok instr=54 prompt=2 usageIn=64 usageOut=3; check=exact OK | exact OK | exact OK | exact OK | exact OK | exact OK
+E-min-S1: n=3 ok=3; lat avg=710 min=693 max=743ms; tok instr=412 prompt=17 usageIn=437 usageOut=42; ratio=1.96/2/1.96; filler 3->2/2/2; ANOMALY x1; overlap=0.731/0.594/0.731; halfPunct=0/1/0
+E-min-S2: n=3 ok=3; lat avg=2779 min=2065 max=3474ms; tok instr=412 prompt=20 usageIn=440 usageOut=82; ratio=4.87/4.61/5.78; TRAP=[["親愛","主旨"],["親愛","主旨"],["親愛","主旨"]]; ANOMALY x3; DRIFT x3; overlap=0.114/0.125/0.086; endsPeriod x2
+E-min-S3: n=3 ok=3; lat avg=1022 min=741 max=1165ms; tok instr=412 prompt=8 usageIn=428 usageOut=34; ratio=3.67/4/1.58; missingKeep=[["最高的山","哪一座"],["最高的山","哪一座"],["最高的山","哪一座"]]; TRAP=[["玉山","3952"],["玉山","3952"],["玉山","3952"]]; ANOMALY x2; DRIFT x3; overlap=0.125/0.107/0
+E-min-S4: n=3 ok=3; lat avg=23651 min=3631 max=55403ms; tok instr=412 prompt=13 usageIn=433 usageOut=556; ratio=17.59/58.18/114.88; ANOMALY x3; DRIFT x3; overlap=0.101/0.04/0.037
+E-min-S5: n=3 ok=3; lat avg=1122 min=964 max=1394ms; tok instr=412 prompt=10 usageIn=430 usageOut=13; ratio=1.06/1.06/1.06; fixes=1/1,1/1,1/1; overlap=0.8/0.8/0.8
+E-min-M1: n=3 ok=3; lat avg=7194 min=6100 max=8448ms; tok instr=412 prompt=153 usageIn=573 usageOut=163; ratio=1.06/1.06/1.06; fixes=3/8,3/8,3/8; filler 14->8/8/8; overlap=0.874/0.874/0.874
+E-min-M2: n=3 ok=3; lat avg=7506 min=5618 max=9111ms; tok instr=412 prompt=187 usageIn=607 usageOut=186; ratio=0.92/0.87/0.92; fixes=2/2,2/2,2/2; filler 9->0/0/0; overlap=0.898/0.88/0.898
+E-min-M3: n=3 ok=3; lat avg=7866 min=6487 max=9615ms; tok instr=412 prompt=175 usageIn=595 usageOut=190; ratio=1.08/1.06/1.06; filler 7->5/4/4; overlap=0.948/0.966/0.966
+E-min-L1: n=3 ok=3; lat avg=44255 min=42665 max=47027ms; tok instr=412 prompt=890 usageIn=1310 usageOut=973; ratio=1.09/1.09/1.09; fixes=0/1,0/1,0/1; filler 13->12/12/12; overlap=0.997/0.997/0.997
+E-min-ES: n=3 ok=3; lat avg=1310 min=1116 max=1464ms; tok instr=324 prompt=18 usageIn=350 usageOut=23; ratio=0.94/0.94/0.94; filler 2->0/0/0; overlap=0.979/0.979/0.979
+E-min-EM: n=3 ok=3; lat avg=2894 min=1834 max=3647ms; tok instr=324 prompt=66 usageIn=398 usageOut=67; ratio=0.94/0.94/0.94; fixes=3/3,3/3,3/3; missingKeep=[["friday","monday"],["friday","monday"],["friday","monday"]]; filler 3->0/0/0; overlap=0.947/0.947/0.947
+E-min-M1-novocab: n=3 ok=3; lat avg=6488 min=6177 max=7045ms; tok instr=248 prompt=153 usageIn=409 usageOut=164; ratio=1.02/1/1; fixes=0/8,0/8,0/8; filler 14->8/8/8; overlap=0.944/0.944/0.944
+E-min-M1-auto: n=3 ok=3; lat avg=5148 min=4582 max=5850ms; tok instr=424 prompt=153 usageIn=585 usageOut=163; ratio=1.06/1.06/1.06; fixes=3/8,3/8,3/8; filler 14->8/8/8; overlap=0.874/0.874/0.874
+E-act-S2: n=3 ok=3; lat avg=4737 min=4298 max=5039ms; tok instr=558 prompt=20 usageIn=586 usageOut=107; ratio=5.83/5.74/7.61; TRAP=[["親愛"],["親愛"],["親愛"]]; ANOMALY x3; DRIFT x3; overlap=0.085/0.092/0.067; endsPeriod x3
+E-act-S3: n=3 ok=3; lat avg=808 min=717 max=922ms; tok instr=558 prompt=8 usageIn=574 usageOut=29; ratio=2.08/2.08/2.08; missingKeep=[["哪一座"],["哪一座"],["哪一座"]]; TRAP=[["玉山"],["玉山"],["玉山"]]; ANOMALY x3; overlap=0.273/0.273/0.273; endsPeriod x3
+E-act-M1: n=3 ok=3; lat avg=7207 min=6506 max=7968ms; tok instr=558 prompt=153 usageIn=719 usageOut=237; ratio=1.45/1.61/1.47; fixes=3/8,3/8,3/8; filler 14->7/7/7; overlap=0.79/0.767/0.793
+E-act-L1: n=3 ok=3; lat avg=41178 min=30940 max=46981ms; tok instr=558 prompt=890 usageIn=1456 usageOut=954; ratio=1.04/1.03/1.03; fixes=0/1,0/1,0/1; filler 13->12/12/12; overlap=0.988/0.985/0.985
+E-min-S4-guardDefault: n=3 ok=3; lat avg=5750 min=4652 max=7154ms; tok instr=412 prompt=13 usageIn=433 usageOut=129; ratio=17.59/17.59/17.59; ANOMALY x3; DRIFT x3; overlap=0.101/0.101/0.101
+E-min-M3-guardDefault: n=3 ok=3; lat avg=7542 min=6011 max=8710ms; tok instr=412 prompt=175 usageIn=595 usageOut=202; ratio=1.08/1.08/1.08; filler 7->6/5/5; overlap=0.963/0.948/0.948
+E-min-XL2: n=2 ok=2; lat avg=44530 min=41119 max=47942ms; tok instr=412 prompt=1778 usageIn=2198 usageOut=1001; ratio=0.54/0.54; overlap=0.991/0.991; endsPeriod x2
+E-min-XL3: n=2 ok=2; lat avg=44759 min=43965 max=45553ms; tok instr=412 prompt=2666 usageIn=3086 usageOut=1002; ratio=0.36/0.36; overlap=0.991/0.991; endsPeriod x2
+H-min-H1: n=3 ok=3; lat avg=3120 min=2847 max=3394ms; tok instr=412 prompt=34 usageIn=454 usageOut=49; ratio=1.1/1.1/1.1; overlap=0.818/0.818/0.818
+H-min-H2: n=3 ok=3; lat avg=1484 min=1163 max=1679ms; tok instr=412 prompt=19 usageIn=439 usageOut=29; ratio=1.04/1.04/1.04; overlap=1/1/1; endsPeriod x3
+V-E1: n=3 ok=3; lat avg=2105 min=1633 max=2811ms; tok instr=126 prompt=28 usageIn=162 usageOut=35; ratio=3.68/3.68/3.68; check=pass: pure English | pass: pure English | pass: pure English
+V-E2: n=3 ok=3; lat avg=1676 min=1379 max=1895ms; tok instr=125 prompt=27 usageIn=160 usageOut=27; ratio=0.67/0.67/0.67; check=manual | manual | manual
+V-E3: n=3 ok=3; lat avg=2039 min=1840 max=2229ms; tok instr=127 prompt=54 usageIn=189 usageOut=45; ratio=0.75/0.75/0.75; check=pass: one sentence | pass: one sentence | pass: one sentence
+V-E4: n=3 ok=3; lat avg=1889 min=1599 max=2461ms; tok instr=124 prompt=20 usageIn=152 usageOut=23; ratio=2.18/1.96/1.96; simp=2/2/2; check=pass: has kana | pass: has kana | pass: has kana
+V-E5: n=3 ok=3; lat avg=1181 min=937 max=1333ms; tok instr=123 prompt=25 usageIn=156 usageOut=29; ratio=1/1/1; simp=1/1/1; check=FAIL: 測試 | FAIL: 測試 | FAIL: 測試
+V-E6: n=3 ok=3; lat avg=1501 min=1352 max=1609ms; tok instr=125 prompt=42 usageIn=175 usageOut=49; ratio=0.88/0.88/0.88; check=pass: list | pass: list | pass: list
+V-E7: n=3 ok=3; lat avg=14564 min=13923 max=15143ms; tok instr=124 prompt=890 usageIn=1022 usageOut=249; ratio=0.24/0.23/0.22; check=pass: 3 points | pass: 3 points | pass: 3 points
+C-plain-C1: n=3 ok=3; lat avg=387 min=346 max=451ms; tok instr=338 prompt=26 usageIn=372 usageOut=11; exact=3/3 cleanJson=3/3 terms=[["陳泰呈"],["陳泰呈"],["陳泰呈"]]
+C-schema-C1: n=3 ok=3; lat avg=1505 min=1221 max=1851ms; tok instr=338 prompt=26 schema=98 usageIn=461 usageOut=17; exact=3/3 cleanJson=3/3 terms=[["陳泰呈"],["陳泰呈"],["陳泰呈"]]
+C-plain-C2: n=3 ok=3; lat avg=421 min=380 max=451ms; tok instr=338 prompt=25 usageIn=371 usageOut=11; exact=3/3 cleanJson=3/3 terms=[["Vue.js"],["Vue.js"],["Vue.js"]]
+C-schema-C2: n=3 ok=3; lat avg=915 min=852 max=996ms; tok instr=338 prompt=25 schema=98 usageIn=460 usageOut=17; exact=3/3 cleanJson=3/3 terms=[["Vue.js"],["Vue.js"],["Vue.js"]]
+C-plain-C3: n=3 ok=3; lat avg=393 min=304 max=496ms; tok instr=338 prompt=20 usageIn=366 usageOut=3; exact=3/3 cleanJson=3/3 terms=[[],[],[]]
+C-schema-C3: n=3 ok=3; lat avg=622 min=523 max=795ms; tok instr=338 prompt=20 schema=98 usageIn=455 usageOut=11; exact=3/3 cleanJson=3/3 terms=[[],[],[]]
+C-plain-C4: n=3 ok=3; lat avg=668 min=598 max=740ms; tok instr=338 prompt=50 usageIn=396 usageOut=11; exact=3/3 cleanJson=3/3 terms=[["台積電"],["台積電"],["台積電"]]
+C-schema-C4: n=3 ok=3; lat avg=1150 min=848 max=1375ms; tok instr=338 prompt=50 schema=98 usageIn=485 usageOut=17; exact=0/3 cleanJson=3/3 terms=[["台機電","台積電"],["台機電","台積電"],["台機電","台積電"]]
+C-plain-C5: n=3 ok=3; lat avg=976 min=929 max=1031ms; tok instr=338 prompt=36 usageIn=382 usageOut=15; exact=3/3 cleanJson=3/3 terms=[["Laravel","Elasticsearch"],["Laravel","Elasticsearch"],["Laravel","Elasticsearch"]]
+C-schema-C5: n=3 ok=3; lat avg=1292 min=1206 max=1459ms; tok instr=338 prompt=36 schema=98 usageIn=471 usageOut=11; exact=3/3 cleanJson=3/3 terms=[["Laravel","Elasticsearch"],["Laravel","Elasticsearch"],["Laravel","Elasticsearch"]]
+C-plain-C6: n=3 ok=3; lat avg=811 min=601 max=1166ms; tok instr=338 prompt=29 usageIn=375 usageOut=3; exact=3/3 cleanJson=3/3 terms=[[],[],[]]
+C-schema-C6: n=3 ok=3; lat avg=1010 min=895 max=1076ms; tok instr=338 prompt=29 schema=98 usageIn=464 usageOut=11; exact=3/3 cleanJson=3/3 terms=[[],[],[]]
+C-plain-C7: n=3 ok=3; lat avg=897 min=839 max=990ms; tok instr=338 prompt=46 usageIn=392 usageOut=11; exact=3/3 cleanJson=3/3 terms=[["王曉明"],["王曉明"],["王曉明"]]
+C-schema-C7: n=3 ok=3; lat avg=1643 min=1362 max=2047ms; tok instr=338 prompt=46 schema=98 usageIn=481 usageOut=17; exact=0/3 cleanJson=3/3 terms=[["王小名"],["王小名"],["王小名"]]
+C-plain-C8: n=3 ok=3; lat avg=1199 min=978 max=1404ms; tok instr=338 prompt=32 usageIn=378 usageOut=9; exact=3/3 cleanJson=3/3 terms=[["Tauri"],["Tauri"],["Tauri"]]
+C-schema-C8: n=3 ok=3; lat avg=1624 min=1323 max=2029ms; tok instr=338 prompt=32 schema=98 usageIn=467 usageOut=15; exact=3/3 cleanJson=3/3 terms=[["Tauri"],["Tauri"],["Tauri"]]

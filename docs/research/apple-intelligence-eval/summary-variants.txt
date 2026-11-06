@@ -1,0 +1,27 @@
+VA-wrap-real-S1: n=3 ok=3; lat avg=1746 min=1550 max=2048ms; tok instr=412 prompt=25 usageIn=445 usageOut=25; ratio=1.04/1.04/1.04; filler 3->2/2/2; overlap=0.864/0.864/0.864
+VA-adapted-S1: n=3 ok=3; lat avg=1224 min=1066 max=1451ms; tok instr=417 prompt=25 usageIn=450 usageOut=23; ratio=1.04/1/1; filler 3->3/3/3; overlap=1/1/1
+VA-adapted-schema-S1: n=3 ok=3; lat avg=1861 min=1407 max=2420ms; tok instr=417 prompt=25 schema=81 usageIn=522 usageOut=29; ratio=0.88/0.88/0.88; filler 3->1/1/1; overlap=1/1/1
+VA-wrap-real-S2: n=3 ok=3; lat avg=1837 min=1343 max=2152ms; tok instr=412 prompt=28 usageIn=448 usageOut=40; ratio=2.48/2.48/1.3; TRAP=[["您好"],["您好"],[]]; ANOMALY x2; overlap=0.235/0.235/0.389
+VA-adapted-S2: n=3 ok=3; lat avg=1394 min=1022 max=1929ms; tok instr=417 prompt=28 usageIn=453 usageOut=29; ratio=1.57/1.13/1.13; overlap=0.259/0.4/0.4; endsPeriod x3
+VA-adapted-schema-S2: n=3 ok=3; lat avg=1547 min=1360 max=1802ms; tok instr=417 prompt=28 schema=81 usageIn=525 usageOut=23; ratio=0.61/0.61/0.61; missingKeep=[["客戶"],["客戶"],["客戶"]]; overlap=0.667/0.667/0.667; endsPeriod x3
+VA-wrap-real-S3: n=3 ok=3; lat avg=1040 min=929 max=1099ms; tok instr=412 prompt=16 usageIn=436 usageOut=17; ratio=1.58/1.58/1.58; TRAP=[["玉山"],["玉山"],["玉山"]]; overlap=0.786/0.786/0.786
+VA-adapted-S3: n=3 ok=3; lat avg=683 min=672 max=694ms; tok instr=417 prompt=16 usageIn=441 usageOut=16; ratio=1.08/1.08/1; overlap=1/1/1
+VA-adapted-schema-S3: n=3 ok=3; lat avg=1526 min=1495 max=1552ms; tok instr=417 prompt=16 schema=81 usageIn=513 usageOut=17; ratio=1.08/1.08/1.08; overlap=1/1/1; endsPeriod x3
+VA-wrap-real-S4: n=3 ok=3; lat avg=1073 min=1026 max=1160ms; tok instr=412 prompt=21 usageIn=441 usageOut=17; ratio=1.06/1.06/1.06; overlap=1/1/1; endsPeriod x3
+VA-adapted-S4: n=3 ok=3; lat avg=758 min=692 max=802ms; tok instr=417 prompt=21 usageIn=446 usageOut=15; ratio=1/1/1; overlap=1/1/1
+VA-adapted-schema-S4: n=3 ok=3; lat avg=1769 min=1692 max=1878ms; tok instr=417 prompt=21 schema=81 usageIn=518 usageOut=25; ratio=1/1/1; overlap=1/1/1
+VA-wrap-real-S5: n=3 ok=3; lat avg=1028 min=900 max=1138ms; tok instr=412 prompt=18 usageIn=438 usageOut=13; ratio=1.06/1.06/1.06; fixes=1/1,1/1,1/1; overlap=0.8/0.8/0.8
+VA-adapted-S5: n=3 ok=3; lat avg=1419 min=983 max=2151ms; tok instr=417 prompt=18 usageIn=443 usageOut=12; ratio=0.94/0.94/1.06; fixes=1/1,1/1,1/1; overlap=0.8/0.8/0.8
+VA-adapted-schema-S5: n=3 ok=3; lat avg=1366 min=1167 max=1632ms; tok instr=417 prompt=18 schema=81 usageIn=515 usageOut=21; ratio=0.94/0.94/0.94; fixes=1/1,1/1,1/1; overlap=0.8/0.8/0.8
+VA-wrap-real-M1: n=3 ok=3; lat avg=7678 min=5703 max=10163ms; tok instr=412 prompt=161 usageIn=581 usageOut=181; ratio=1.18/1.18/1.18; fixes=3/8,3/8,3/8; filler 14->12/12/12; overlap=0.905/0.905/0.905
+VA-adapted-M1: n=3 ok=3; lat avg=10432 min=10037 max=11084ms; tok instr=417 prompt=161 usageIn=586 usageOut=176; ratio=1.12/1.12/1.13; fixes=0/8,0/8,0/8; filler 14->12/12/12; overlap=0.986/0.986/0.986
+VA-adapted-schema-M1: n=3 ok=3; lat avg=12614 min=12141 max=13379ms; tok instr=417 prompt=161 schema=81 usageIn=658 usageOut=169; ratio=1.14/1.14/1.14; fixes=6/8,6/8,6/8; filler 14->8/8/8; overlap=0.784/0.784/0.784; endsPeriod x3
+VA-wrap-real-M2: n=3 ok=3; lat avg=12815 min=12115 max=13525ms; tok instr=412 prompt=195 usageIn=615 usageOut=227; ratio=1.17/1.17/1.17; fixes=2/2,2/2,2/2; filler 9->1/1/1; overlap=0.926/0.926/0.926
+VA-adapted-M2: n=3 ok=3; lat avg=10605 min=10041 max=11578ms; tok instr=417 prompt=195 usageIn=620 usageOut=193; ratio=1/1/1; fixes=1/2,1/2,1/2; filler 9->9/9/9; overlap=1/1/1
+VA-adapted-schema-M2: n=3 ok=3; lat avg=11454 min=10924 max=12063ms; tok instr=417 prompt=195 schema=81 usageIn=692 usageOut=195; ratio=0.99/1/1; fixes=1/2,2/2,1/2; filler 9->7/9/9; overlap=0.992/0.992/1
+VA-wrap-real-M3: n=3 ok=3; lat avg=9317 min=8266 max=11073ms; tok instr=412 prompt=183 usageIn=603 usageOut=158; ratio=1.08/0.78/0.78; filler 7->6/5/5; overlap=0.979/0.978/0.978
+VA-adapted-M3: n=3 ok=3; lat avg=11446 min=10407 max=12022ms; tok instr=417 prompt=183 usageIn=608 usageOut=193; ratio=1.08/1.08/1.08; filler 7->6/6/6; overlap=0.992/0.992/0.992
+VA-adapted-schema-M3: n=3 ok=3; lat avg=11588 min=10200 max=12676ms; tok instr=417 prompt=183 schema=81 usageIn=680 usageOut=196; ratio=1.07/1/1.07; filler 7->5/7/5; overlap=0.988/1/0.988
+VA-wrap-real-L1: n=2 ok=2; lat avg=68298 min=67187 max=69408ms; tok instr=412 prompt=898 usageIn=1318 usageOut=999; ratio=1.07/1.07; fixes=0/1,0/1; missingKeep=[["修正偵測"],["修正偵測"]]; filler 13->12/12; overlap=0.993/0.993; endsPeriod x2
+VA-adapted-L1: n=2 ok=2; lat avg=50705 min=50250 max=51160ms; tok instr=417 prompt=898 usageIn=1323 usageOut=903; ratio=1/1; fixes=0/1,0/1; filler 13->12/12; overlap=0.999/0.999
+VA-adapted-schema-L1: n=2 ok=2; lat avg=65955 min=59781 max=72129ms; tok instr=417 prompt=898 schema=81 usageIn=1395 usageOut=995; ratio=1.07/1.07; fixes=0/1,0/1; missingKeep=[["修正偵測"],["修正偵測"]]; filler 13->12/12; overlap=0.998/0.998; endsPeriod x2
