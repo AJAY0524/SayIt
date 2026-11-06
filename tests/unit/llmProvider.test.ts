@@ -122,7 +122,7 @@ describe("llmProvider.ts", () => {
       expect(headers.Authorization).toBeUndefined();
     });
 
-    it("[P0] Anthropic 5.5 世代：不送 temperature，Haiku 關閉思考、Sonnet 用 between_tools，effort 為 low", () => {
+    it("[P0] Anthropic 5.5 世代：不送 temperature，Haiku 關閉思考且不送 effort、Sonnet 用 between_tools 搭配 effort low", () => {
       const withTemperature: LlmChatRequest = { ...BASE_REQUEST, temperature: 0.1 };
 
       const haiku = JSON.parse(
@@ -134,7 +134,7 @@ describe("llmProvider.ts", () => {
       );
       expect(haiku.temperature).toBeUndefined();
       expect(haiku.thinking).toEqual({ type: "disabled" });
-      expect(haiku.output_config).toEqual({ effort: "low" });
+      expect(haiku.output_config).toBeUndefined();
 
       const sonnet = JSON.parse(
         buildFetchParams(
