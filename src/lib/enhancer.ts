@@ -8,8 +8,12 @@ import {
   getProviderTimeout,
   getDefaultMaxTokens,
   type LlmChatRequest,
+  type LlmEffort,
 } from "./llmProvider";
-import { getMinimalPromptForLocale } from "../i18n/prompts";
+import {
+  getMinimalPromptForLocale,
+  getTranscriptStructureNote,
+} from "../i18n/prompts";
 import type { SupportedLocale } from "../i18n/languageConfig";
 import i18n from "../i18n";
 import {
@@ -47,6 +51,30 @@ export interface EnhanceOptions {
    * （zh-TW／yue → 簡轉繁，#83）。編輯模式、連線測試不傳。
    */
   transcriptLocale?: string;
+  /**
+   * 文字整理專用（#27）：user 訊息包成 `<transcript>`、system prompt 末尾附加各語系固定的結構說明，
+   * 輸出剝除模型抄回的 `<transcript>` 標籤。預設不包；選取文字語音改寫與連線測試不傳。
+   */
+  wrapTranscript?: boolean;
+  /** Anthropic `output_config.effort`；目前只對 Claude Haiku 5.5 生效，不傳等同 medium（#31 第 7 條） */
+  effort?: LlmEffort;
+}
+
+/**
+ * 文字整理（wrapTranscript）預設送出的 effort（#31 第 7 條）。Haiku 5.5 實測（32 案 × 5 次）：
+ * high 全過 32/32、medium 30/32（口述指令類未全過），中位延遲差距 +0.6%，符合「通過率不降、延遲增幅 ≤ 30%」。
+ * 只對 Claude Haiku 5.5 生效；呼叫端明確傳入 effort 時以呼叫端為準。
+ */
+export const TEXT_CLEANUP_EFFORT: LlmEffort | undefined = "high";
+
+/** 文字整理送出的 user 訊息：逐字稿包進 `<transcript>`（#27） */
+export function wrapTranscriptMessage(rawText: string): string {
+  return `<transcript>\n${rawText}\n</transcript>`;
+}
+
+/** 剝除模型抄回來的 `<transcript>` 標籤（只去標籤、保留內容） */
+export function stripTranscriptTags(text: string): string {
+  return text.replace(/<\/?transcript>/g, "").trim();
 }
 
 async function withTimeout<T>(
@@ -124,16 +152,28 @@ export async function enhanceText(
   const providerId = getProviderIdForModel(modelId);
 
   const basePrompt = options?.systemPrompt || getDefaultSystemPrompt();
-  const fullPrompt = buildSystemPrompt(basePrompt, options?.vocabularyTermList);
+  const wrapTranscript = options?.wrapTranscript === true;
+  let fullPrompt = buildSystemPrompt(basePrompt, options?.vocabularyTermList);
+  if (wrapTranscript) {
+    // 結構說明放在最末尾（比照 <vocabulary>）；內建與自訂 prompt 都套用（#27）
+    const noteLocale =
+      options?.transcriptLocale ?? (i18n.global.locale.value as string);
+    fullPrompt += `\n\n${getTranscriptStructureNote(noteLocale)}`;
+  }
 
   const request: LlmChatRequest = {
     model: modelId,
     messages: [
       { role: "system", content: fullPrompt },
-      { role: "user", content: rawText },
+      {
+        role: "user",
+        content: wrapTranscript ? wrapTranscriptMessage(rawText) : rawText,
+      },
     ],
     temperature: 0.1,
     maxTokens: options?.maxTokens ?? getDefaultMaxTokens(providerId),
+    effort:
+      options?.effort ?? (wrapTranscript ? TEXT_CLEANUP_EFFORT : undefined),
   };
 
   const { url, init } = buildFetchParams(providerId, request, apiKey);
@@ -175,7 +215,10 @@ export async function enhanceText(
     return { text: rawText, usage, isRawFallback: true };
   }
 
-  const enhancedContent = stripReasoningTags(result.text);
+  const withoutReasoning = stripReasoningTags(result.text);
+  const enhancedContent = wrapTranscript
+    ? stripTranscriptTags(withoutReasoning)
+    : withoutReasoning;
   if (!enhancedContent) {
     return { text: rawText, usage, isRawFallback: true };
   }
@@ -192,7 +235,7 @@ export interface EnhanceWithGuardResult {
   usage: ChatUsageData | null;
   /** true 表示重試後仍偵測到長度爆炸異常，text 已 fallback 回 rawText。 */
   wasAnomalous: boolean;
-  /** true 表示整理結果與原文 bigram 重疊過低（疑似答非所問）；呼叫端應拒絕並保留既有結果、勿寫入 DB。 */
+  /** true 表示整理結果語意飄移（#43 bigram、#30 字元保留率／人稱／否定詞／回應語）；呼叫端應拒絕並保留既有結果、勿寫入 DB。 */
   wasDrift: boolean;
   /** true 表示 LLM 回了空內容、text 只是退回的原文；呼叫端應保留既有結果、勿寫入 DB。 */
   wasEmptyResponse: boolean;

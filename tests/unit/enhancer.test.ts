@@ -16,6 +16,7 @@ vi.mock("../../src/i18n", () => ({
 
 vi.mock("../../src/i18n/prompts", () => ({
   getMinimalPromptForLocale: () => "mock-default-prompt",
+  getTranscriptStructureNote: (locale: string) => `mock-structure-note-${locale}`,
   getPromptForModeAndLocale: (mode: string) =>
     mode === "active" ? "mock-active-prompt" : "mock-default-prompt",
   isKnownDefaultPrompt: (prompt: string) => prompt === "mock-default-prompt",
@@ -345,6 +346,115 @@ describe("enhancer.ts", () => {
       const callArgs = mockFetch.mock.calls[0];
       const body = JSON.parse(callArgs[1].body);
       expect(body.messages[0].content).not.toContain("<vocabulary>");
+    });
+  });
+
+  describe("文字整理包裝 wrapTranscript（#27）", () => {
+    it("[P0] 預設不包：user 訊息是原文、system prompt 不附結構說明", async () => {
+      mockFetch.mockResolvedValue(createSuccessResponse("整理後"));
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      await enhanceText("原始逐字稿", TEST_API_KEY, { systemPrompt: "基礎" });
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.messages[0].content).toBe("基礎");
+      expect(body.messages[1].content).toBe("原始逐字稿");
+    });
+
+    it("[P0] 開啟後 user 訊息包成 <transcript>，結構說明附在 <vocabulary> 之後的末尾", async () => {
+      mockFetch.mockResolvedValue(createSuccessResponse("整理後"));
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      await enhanceText("原始逐字稿", TEST_API_KEY, {
+        systemPrompt: "自訂 prompt",
+        vocabularyTermList: ["SayIt"],
+        transcriptLocale: "en",
+        wrapTranscript: true,
+      });
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.messages[1].content).toBe(
+        "<transcript>\n原始逐字稿\n</transcript>",
+      );
+      expect(body.messages[0].content).toBe(
+        "自訂 prompt\n\n<vocabulary>\nSayIt\n</vocabulary>\n\nmock-structure-note-en",
+      );
+    });
+
+    it("[P1] 沒有 transcriptLocale 時結構說明跟介面語言", async () => {
+      mockFetch.mockResolvedValue(createSuccessResponse("整理後"));
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      await enhanceText("原始逐字稿", TEST_API_KEY, { wrapTranscript: true });
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.messages[0].content).toMatch(/mock-structure-note-zh-TW$/);
+    });
+
+    it("[P0] 輸出剝除模型抄回的 <transcript> 標籤", async () => {
+      mockFetch.mockResolvedValue(
+        createSuccessResponse("<transcript>\n整理後的文字\n</transcript>"),
+      );
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      const result = await enhanceText("原始逐字稿", TEST_API_KEY, {
+        wrapTranscript: true,
+      });
+      expect(result.text).toBe("整理後的文字");
+      expect(result.isRawFallback).toBeUndefined();
+    });
+
+    it("[P0] 只抄回空標籤視為空回應，退回原文", async () => {
+      mockFetch.mockResolvedValue(
+        createSuccessResponse("<transcript></transcript>"),
+      );
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      const result = await enhanceText("原始逐字稿", TEST_API_KEY, {
+        wrapTranscript: true,
+      });
+      expect(result).toMatchObject({ text: "原始逐字稿", isRawFallback: true });
+    });
+
+    it("[P1] 沒開包裝時不剝除標籤（選取文字語音改寫等用途維持原樣）", async () => {
+      mockFetch.mockResolvedValue(
+        createSuccessResponse("<transcript>保留</transcript>"),
+      );
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      const result = await enhanceText("原始", TEST_API_KEY);
+      expect(result.text).toBe("<transcript>保留</transcript>");
+    });
+
+    it("[P0] 文字整理預設對 Haiku 5.5 送 effort high；沒開包裝時不送（#31 第 7 條）", async () => {
+      const anthropicOk = () => ({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          content: [{ type: "text", text: "整理後" }],
+        }),
+      });
+      mockFetch.mockResolvedValueOnce(anthropicOk());
+      mockFetch.mockResolvedValueOnce(anthropicOk());
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      await enhanceText("原始逐字稿", TEST_API_KEY, {
+        modelId: "claude-haiku-5-5",
+        wrapTranscript: true,
+      });
+      await enhanceText("原始逐字稿", TEST_API_KEY, {
+        modelId: "claude-haiku-5-5",
+      });
+      const wrapped = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const plain = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(wrapped.output_config).toEqual({ effort: "high" });
+      expect(plain.output_config).toBeUndefined();
+    });
+
+    it("[P0] 呼叫端傳 effort 時 Haiku 5.5 送 output_config.effort", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          content: [{ type: "text", text: "整理後" }],
+        }),
+      });
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      await enhanceText("原始逐字稿", TEST_API_KEY, {
+        modelId: "claude-haiku-5-5",
+        wrapTranscript: true,
+        effort: "high",
+      });
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.output_config).toEqual({ effort: "high" });
     });
   });
 

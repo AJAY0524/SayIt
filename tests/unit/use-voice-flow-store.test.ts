@@ -616,6 +616,10 @@ describe("useVoiceFlowStore", () => {
       expect(mockEnhanceText.mock.calls[0][2]).not.toHaveProperty(
         "transcriptLocale",
       );
+      // #27：<transcript> 包裝只套用在文字整理，選取文字語音改寫不包
+      expect(mockEnhanceText.mock.calls[0][2]).not.toHaveProperty(
+        "wrapTranscript",
+      );
       expect(mockInvoke).not.toHaveBeenCalledWith("read_selected_text");
     });
 
@@ -1180,7 +1184,10 @@ describe("useVoiceFlowStore", () => {
         expect(mockEnhanceText).toHaveBeenCalledWith(
           longText,
           "test-api-key-123",
-          expect.objectContaining({ transcriptLocale: expected }),
+          expect.objectContaining({
+            transcriptLocale: expected,
+            wrapTranscript: true,
+          }),
         );
       },
     );
@@ -1437,7 +1444,7 @@ describe("useVoiceFlowStore", () => {
         }),
       );
       mockEnhanceText.mockResolvedValueOnce({
-        text: "這是 AI 整理過的短文字",
+        text: "這是短文字測試（整理）",
         usage: null,
       });
 
@@ -1454,7 +1461,7 @@ describe("useVoiceFlowStore", () => {
       triggerHotkeyEvent("hotkey:released");
       await vi.waitFor(() => {
         expect(mockInvoke).toHaveBeenCalledWith("paste_text", {
-          text: "這是 AI 整理過的短文字",
+          text: "這是短文字測試（整理）",
           restoreClipboard: false,
         });
       });
@@ -2443,7 +2450,10 @@ describe("useVoiceFlowStore", () => {
         expect(mockEnhanceText).toHaveBeenCalledWith(
           longText,
           "test-api-key-123",
-          expect.objectContaining({ transcriptLocale: "en" }),
+          expect.objectContaining({
+            transcriptLocale: "en",
+            wrapTranscript: true,
+          }),
         );
       });
     });
