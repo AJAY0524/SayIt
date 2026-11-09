@@ -51,17 +51,12 @@ export interface EnhanceOptions {
    * （zh-TW／yue → 簡轉繁，#83）。編輯模式、連線測試不傳。
    */
   transcriptLocale?: string;
-  /**
-   * 文字整理專用（#27）：user 訊息包成 `<transcript>`、system prompt 末尾附加各語系固定的結構說明，
-   * 輸出剝除模型抄回的 `<transcript>` 標籤。預設不包；選取文字語音改寫與連線測試不傳。
-   */
-  wrapTranscript?: boolean;
   /** Anthropic `output_config.effort`；目前只對 Claude Haiku 5.5 生效，不傳等同 medium（#31 第 7 條） */
   effort?: LlmEffort;
 }
 
 /**
- * 文字整理（wrapTranscript）預設送出的 effort（#31 第 7 條）。Haiku 5.5 實測（32 案 × 5 次）：
+ * 文字整理（cleanupTranscript）預設送出的 effort（#31 第 7 條）。Haiku 5.5 實測（32 案 × 5 次）：
  * high 全過 32/32、medium 30/32（口述指令類未全過），中位延遲差距 +0.6%，符合「通過率不降、延遲增幅 ≤ 30%」。
  * 只對 Claude Haiku 5.5 生效；呼叫端明確傳入 effort 時以呼叫端為準。
  */
@@ -139,10 +134,36 @@ export function stripReasoningTags(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
-export async function enhanceText(
+/**
+ * 文字整理（#27）：逐字稿包成 `<transcript>`、system prompt 末尾附加各語系固定的結構說明，
+ * 輸出剝除模型抄回的 `<transcript>` 標籤，effort 預設 TEXT_CLEANUP_EFFORT。
+ * 錄音後整理、重新整理、重講取代都走這裡；包裝由函式本身決定，呼叫端無從漏掉。
+ */
+export function cleanupTranscript(
   rawText: string,
   apiKey: string,
   options?: EnhanceOptions,
+): Promise<EnhanceResult> {
+  return requestEnhancement(rawText, apiKey, options, true);
+}
+
+/**
+ * 原文直送、不包 `<transcript>`：選取文字語音改寫（user 訊息是組好的指令）與連線測試用。
+ * 逐字稿的文字整理改用 cleanupTranscript。
+ */
+export function enhanceText(
+  rawText: string,
+  apiKey: string,
+  options?: EnhanceOptions,
+): Promise<EnhanceResult> {
+  return requestEnhancement(rawText, apiKey, options, false);
+}
+
+async function requestEnhancement(
+  rawText: string,
+  apiKey: string,
+  options: EnhanceOptions | undefined,
+  wrapTranscript: boolean,
 ): Promise<EnhanceResult> {
   if (!apiKey || apiKey.trim() === "") {
     throw new Error("API Key not configured");
@@ -152,7 +173,6 @@ export async function enhanceText(
   const providerId = getProviderIdForModel(modelId);
 
   const basePrompt = options?.systemPrompt || getDefaultSystemPrompt();
-  const wrapTranscript = options?.wrapTranscript === true;
   let fullPrompt = buildSystemPrompt(basePrompt, options?.vocabularyTermList);
   if (wrapTranscript) {
     // 結構說明放在最末尾（比照 <vocabulary>）；內建與自訂 prompt 都套用（#27）
@@ -244,7 +264,7 @@ export interface EnhanceWithGuardResult {
 }
 
 /**
- * enhanceText 外加兩道獨立守衛：
+ * cleanupTranscript（文字整理）外加兩道獨立守衛：
  * 1.「增強後長度爆炸」：偵測到異常時最多重試 maxRetries 次，仍異常則 fallback 回 rawText、標記 wasAnomalous=true。
  * 2.「語意飄移」（#43）：最終結果與原文 bigram 重疊過低時標記 wasDrift=true，呼叫端據此「拒絕並保留既有結果」。
  * 目前由歷史紀錄重新整理使用；邏輯與 useVoiceFlowStore 即時流程的 inline 迴圈一致，未來可收斂共用。
@@ -255,7 +275,7 @@ export async function enhanceWithAnomalyGuard(
   options?: EnhanceOptions,
   maxRetries = DEFAULT_ENHANCEMENT_RETRY_COUNT,
 ): Promise<EnhanceWithGuardResult> {
-  let enhanceResult = await enhanceText(rawText, apiKey, options);
+  let enhanceResult = await cleanupTranscript(rawText, apiKey, options);
 
   let retryCount = 0;
   while (
@@ -264,10 +284,10 @@ export async function enhanceWithAnomalyGuard(
       .isAnomaly
   ) {
     retryCount++;
-    enhanceResult = await enhanceText(rawText, apiKey, options);
+    enhanceResult = await cleanupTranscript(rawText, apiKey, options);
   }
 
-  // 空回應退回原文：enhanceText 已 fallback 成 rawText，對長度爆炸／飄移都「看起來正常」，
+  // 空回應退回原文：cleanupTranscript 已 fallback 成 rawText，對長度爆炸／飄移都「看起來正常」，
   // 這裡要先攔下，否則呼叫端會把原文當整理結果覆寫既有內容
   if (enhanceResult.isRawFallback) {
     return {

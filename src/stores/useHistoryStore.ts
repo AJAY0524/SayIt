@@ -867,7 +867,6 @@ export const useHistoryStore = defineStore("history", () => {
           vocabularyTermList: termList.length > 0 ? termList : undefined,
           modelId: settingsStore.selectedLlmModelId,
           transcriptLocale: getEffectiveTranscriptLocale(settingsStore),
-          wrapTranscript: true,
         },
       );
     } catch (err) {

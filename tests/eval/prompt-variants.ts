@@ -17,7 +17,7 @@ export interface PromptVariant {
   id: string;
   label: string;
   systemPrompt: string;
-  /** 傳給 enhanceText 的 wrapTranscript（#27 定案結構） */
+  /** true 走 cleanupTranscript（#27 定案結構）；false 用 enhanceText 原文直送 */
   wrapTranscript: boolean;
 }
 

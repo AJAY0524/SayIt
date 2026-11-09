@@ -349,7 +349,7 @@ describe("enhancer.ts", () => {
     });
   });
 
-  describe("文字整理包裝 wrapTranscript（#27）", () => {
+  describe("文字整理包裝 cleanupTranscript（#27）", () => {
     it("[P0] 預設不包：user 訊息是原文、system prompt 不附結構說明", async () => {
       mockFetch.mockResolvedValue(createSuccessResponse("整理後"));
       const { enhanceText } = await import("../../src/lib/enhancer");
@@ -361,12 +361,11 @@ describe("enhancer.ts", () => {
 
     it("[P0] 開啟後 user 訊息包成 <transcript>，結構說明附在 <vocabulary> 之後的末尾", async () => {
       mockFetch.mockResolvedValue(createSuccessResponse("整理後"));
-      const { enhanceText } = await import("../../src/lib/enhancer");
-      await enhanceText("原始逐字稿", TEST_API_KEY, {
+      const { cleanupTranscript } = await import("../../src/lib/enhancer");
+      await cleanupTranscript("原始逐字稿", TEST_API_KEY, {
         systemPrompt: "自訂 prompt",
         vocabularyTermList: ["SayIt"],
         transcriptLocale: "en",
-        wrapTranscript: true,
       });
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.messages[1].content).toBe(
@@ -379,8 +378,8 @@ describe("enhancer.ts", () => {
 
     it("[P1] 沒有 transcriptLocale 時結構說明跟介面語言", async () => {
       mockFetch.mockResolvedValue(createSuccessResponse("整理後"));
-      const { enhanceText } = await import("../../src/lib/enhancer");
-      await enhanceText("原始逐字稿", TEST_API_KEY, { wrapTranscript: true });
+      const { cleanupTranscript } = await import("../../src/lib/enhancer");
+      await cleanupTranscript("原始逐字稿", TEST_API_KEY);
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.messages[0].content).toMatch(/mock-structure-note-zh-TW$/);
     });
@@ -389,9 +388,8 @@ describe("enhancer.ts", () => {
       mockFetch.mockResolvedValue(
         createSuccessResponse("<transcript>\n整理後的文字\n</transcript>"),
       );
-      const { enhanceText } = await import("../../src/lib/enhancer");
-      const result = await enhanceText("原始逐字稿", TEST_API_KEY, {
-        wrapTranscript: true,
+      const { cleanupTranscript } = await import("../../src/lib/enhancer");
+      const result = await cleanupTranscript("原始逐字稿", TEST_API_KEY, {
       });
       expect(result.text).toBe("整理後的文字");
       expect(result.isRawFallback).toBeUndefined();
@@ -401,9 +399,8 @@ describe("enhancer.ts", () => {
       mockFetch.mockResolvedValue(
         createSuccessResponse("<Transcript>整理後的文字</TRANSCRIPT>"),
       );
-      const { enhanceText } = await import("../../src/lib/enhancer");
-      const result = await enhanceText("原始逐字稿", TEST_API_KEY, {
-        wrapTranscript: true,
+      const { cleanupTranscript } = await import("../../src/lib/enhancer");
+      const result = await cleanupTranscript("原始逐字稿", TEST_API_KEY, {
       });
       expect(result.text).toBe("整理後的文字");
     });
@@ -412,9 +409,8 @@ describe("enhancer.ts", () => {
       mockFetch.mockResolvedValue(
         createSuccessResponse("<transcript></transcript>"),
       );
-      const { enhanceText } = await import("../../src/lib/enhancer");
-      const result = await enhanceText("原始逐字稿", TEST_API_KEY, {
-        wrapTranscript: true,
+      const { cleanupTranscript } = await import("../../src/lib/enhancer");
+      const result = await cleanupTranscript("原始逐字稿", TEST_API_KEY, {
       });
       expect(result).toMatchObject({ text: "原始逐字稿", isRawFallback: true });
     });
@@ -437,10 +433,11 @@ describe("enhancer.ts", () => {
       });
       mockFetch.mockResolvedValueOnce(anthropicOk());
       mockFetch.mockResolvedValueOnce(anthropicOk());
-      const { enhanceText } = await import("../../src/lib/enhancer");
-      await enhanceText("原始逐字稿", TEST_API_KEY, {
+      const { enhanceText, cleanupTranscript } = await import(
+        "../../src/lib/enhancer"
+      );
+      await cleanupTranscript("原始逐字稿", TEST_API_KEY, {
         modelId: "claude-haiku-5-5",
-        wrapTranscript: true,
       });
       await enhanceText("原始逐字稿", TEST_API_KEY, {
         modelId: "claude-haiku-5-5",
@@ -458,10 +455,9 @@ describe("enhancer.ts", () => {
           content: [{ type: "text", text: "整理後" }],
         }),
       });
-      const { enhanceText } = await import("../../src/lib/enhancer");
-      await enhanceText("原始逐字稿", TEST_API_KEY, {
+      const { cleanupTranscript } = await import("../../src/lib/enhancer");
+      await cleanupTranscript("原始逐字稿", TEST_API_KEY, {
         modelId: "claude-haiku-5-5",
-        wrapTranscript: true,
         effort: "high",
       });
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);

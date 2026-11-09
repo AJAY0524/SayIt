@@ -13,7 +13,11 @@ import {
 } from "../lib/errorUtils";
 import { captureError } from "../lib/sentry";
 import { logInfoLine, logErrorLine } from "../lib/logger";
-import { enhanceText, buildSystemPrompt } from "../lib/enhancer";
+import {
+  enhanceText,
+  cleanupTranscript,
+  buildSystemPrompt,
+} from "../lib/enhancer";
 import { getEditModePromptForLocale } from "../i18n/prompts";
 import {
   buildEditUserMessage,
@@ -1420,10 +1424,9 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
             modelId: settingsStore.selectedLlmModelId,
             signal: abortController?.signal,
             transcriptLocale: getEffectiveTranscriptLocale(),
-            wrapTranscript: true,
           };
 
-          let enhanceResult = await enhanceText(
+          let enhanceResult = await cleanupTranscript(
             result.rawText,
             llmApiKey,
             enhanceOptions,
@@ -1443,7 +1446,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
             writeInfoLog(
               `useVoiceFlowStore: enhancement anomaly detected (attempt ${retryCount}/${MAX_ENHANCEMENT_RETRY_COUNT}), retrying`,
             );
-            enhanceResult = await enhanceText(
+            enhanceResult = await cleanupTranscript(
               result.rawText,
               llmApiKey,
               enhanceOptions,
@@ -1744,11 +1747,13 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
       modelId: settingsStore.selectedLlmModelId,
       signal: abortController?.signal,
       transcriptLocale: getEffectiveTranscriptLocale(),
-      // 口述內容就是逐字稿，與錄音後文字整理同樣包成 <transcript>（#27）
-      wrapTranscript: true,
     };
 
-    let enhanceResult = await enhanceText(voiceText, llmApiKey, enhanceOptions);
+    let enhanceResult = await cleanupTranscript(
+      voiceText,
+      llmApiKey,
+      enhanceOptions,
+    );
     let usage = enhanceResult.usage;
     let retryCount = 0;
     while (
@@ -1760,7 +1765,11 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
       }).isAnomaly
     ) {
       retryCount++;
-      enhanceResult = await enhanceText(voiceText, llmApiKey, enhanceOptions);
+      enhanceResult = await cleanupTranscript(
+        voiceText,
+        llmApiKey,
+        enhanceOptions,
+      );
       usage = mergeChatUsage(usage, enhanceResult.usage);
     }
 
@@ -1895,15 +1904,20 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
 
           const enhancementTermList =
             await vocabularyStore.getTopTermListByWeight(50);
-          let enhanceResult = await enhanceText(result.rawText, llmApiKey, {
-            systemPrompt: settingsStore.getAiPrompt(),
-            vocabularyTermList:
-              enhancementTermList.length > 0 ? enhancementTermList : undefined,
-            modelId: settingsStore.selectedLlmModelId,
-            signal: abortController?.signal,
-            transcriptLocale: getEffectiveTranscriptLocale(),
-            wrapTranscript: true,
-          });
+          let enhanceResult = await cleanupTranscript(
+            result.rawText,
+            llmApiKey,
+            {
+              systemPrompt: settingsStore.getAiPrompt(),
+              vocabularyTermList:
+                enhancementTermList.length > 0
+                  ? enhancementTermList
+                  : undefined,
+              modelId: settingsStore.selectedLlmModelId,
+              signal: abortController?.signal,
+              transcriptLocale: getEffectiveTranscriptLocale(),
+            },
+          );
           if (isAborted.value) return;
 
           // 重送路徑同樣套用守衛（長度爆炸 / 語意飄走 #43）→ fallback 到 rawText
