@@ -6,6 +6,7 @@
 
 - 本 repo 是 `chenjackle45/SayIt` 的 fork；上游不是我們的 repo，**絕不在上游開票、留言、貼標籤**（對外留言一律先給 AJ 過目，見 `docs/development-process.md`）。
 - 已執行 `gh repo set-default AJAY0524/SayIt`，但 fork 的 `gh` 仍可能誤指上游；**每個寫入指令都明確帶 `-R AJAY0524/SayIt`**。
+- **fork 是公開 repo**：票、PR、留言、測試語料一律用改寫或合成的句子，不放真實聽寫內容或使用者資料；路徑一律寫 repo 相對路徑（如 `src/lib/enhancer.ts`）。
 - `docs/community-commitments.md` 等文件裡的 `#83`、`#84` 是**上游**的 issue 編號，要讀時用 `gh issue view <n> -R chenjackle45/SayIt`（唯讀）。fork 自己的編號另起，且與 fork 的 PR 共用編號空間（例：fork 的 `#1` 是 PR）。
 
 ## 慣例
