@@ -343,6 +343,7 @@
     "editMode": "編集",
     "editing": "編集中...",
     "editSuccess": "編集完了 ✓",
+    "replaceSuccess": "再入力しました ✓",
     "editFailed": "編集失敗",
     "recordingTooShort": "録音時間が短すぎます",
     "vocabularyLearnedLabel": "辞書に追加",

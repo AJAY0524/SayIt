@@ -343,6 +343,7 @@
     "editMode": "编辑",
     "editing": "编辑中...",
     "editSuccess": "已编辑 ✓",
+    "replaceSuccess": "已重新输入 ✓",
     "editFailed": "编辑失败",
     "recordingTooShort": "录音时间太短",
     "vocabularyLearnedLabel": "新增字典",
