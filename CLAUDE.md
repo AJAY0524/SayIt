@@ -106,6 +106,7 @@ Codex 不會依 `paths` 自動載入 rules，派工時把相關那檔路徑寫�
 ## 開發環境與常用指令
 
 - **Node.js 24**（見 `.nvmrc`）、**pnpm 10.28.2**（`corepack enable && corepack prepare`）、**Rust stable**
+- shell 找不到 `pnpm`（agent 的非互動 shell 常見）時，把下表的 `pnpm` 換成 `corepack pnpm`，例：`corepack pnpm test`
 
 | 指令 | 用途 |
 |------|------|
