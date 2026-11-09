@@ -96,10 +96,25 @@ export const SEMANTIC_DRIFT_MIN_RAW_CHARS = 6;
  *  刻意設低（保守）：只擋「明顯不相干」，避免把合法的條列化/大幅改寫誤判成 drift。 */
 export const SEMANTIC_DRIFT_MIN_OVERLAP = 0.2;
 
+/** 原文字元保留率門檻（#30）：原文（去除贅詞與自我更正片段後）的字元出現在輸出中的比例低於此值 → 飄移 */
+export const SEMANTIC_DRIFT_MIN_CHAR_RETENTION = 0.75;
+
+/** 飄移原因（#30）；同一筆可同時命中多個 */
+export type SemanticDriftReason =
+  | "low-bigram-overlap"
+  | "low-char-retention"
+  | "person-changed"
+  | "negation-dropped"
+  | "response-opener";
+
 export interface SemanticDriftResult {
   isDrift: boolean;
   /** enhanced 的 bigram 有多少比例 grounded 在 raw（containment，0~1） */
   overlapRatio: number;
+  /** 原文（去除贅詞與自我更正片段後）的字元出現在輸出中的比例（0~1） */
+  charRetention: number;
+  /** 命中的判準；空陣列代表沒有飄移 */
+  reasons: SemanticDriftReason[];
 }
 
 /**
@@ -121,15 +136,115 @@ function toBigramSet(text: string): Set<string> {
   return set;
 }
 
+// ── #30 新判準用的詞表 ──
+
+/** 計算字元保留率前從原文移除的贅詞：模型照提示詞刪掉它們是正常行為 */
+const DRIFT_FILLER_WORDS = ["基本上", "那個", "就是", "然後", "其實", "嗯", "呃", "欸"];
+/** 自我更正訊號：訊號詞與被它取代的前一個說法，在比對前從原文移除 */
+const SELF_CORRECTION_SIGNALS = [
+  "更正一下",
+  "講錯了",
+  "說錯了",
+  "我是說",
+  "不對",
+];
+/** 人稱組（#30）：第一人稱、第二人稱；第三人稱不列入 */
+const PERSON_GROUPS: { id: string; chars: string[] }[] = [
+  { id: "first", chars: ["我"] },
+  { id: "second", chars: ["你", "妳", "您"] },
+];
+/** 否定詞字元（#30） */
+const NEGATION_CHAR_PATTERN = /[不沒別無未]/;
+/** 回應語開頭（比對前已正規化：去除空白標點、轉小寫、簡轉繁） */
+const RESPONSE_OPENERS = [
+  "好的",
+  "好喔",
+  "沒問題",
+  "當然",
+  "以下是",
+  "以下為",
+  "抱歉",
+  "很抱歉",
+  "對不起",
+  "不好意思",
+  "我理解",
+  "我明白",
+  "了解",
+  "收到",
+  "謝謝",
+];
+
 /**
- * 增強後語意偏移偵測（#43 核心守衛）。
+ * 移除原文中的自我更正片段：子句以訊號詞開頭時，連同前一個子句一起移除；
+ * 訊號詞在子句中間時，移除該子句中訊號詞（含）之前的部分。
+ * 只用來放寬判準（避免把合法的自我更正誤判成飄移），不會讓判定更嚴格。
+ */
+function stripSelfCorrections(rawText: string): string {
+  const clauseList = convertSimplifiedToTraditional(rawText)
+    .split(/[\s\p{P}]+/u)
+    .filter(Boolean);
+  const kept: string[] = [];
+  // 訊號詞自成一個子句時（「三點 不對 是五點」），更正句型的「是」落在下一個子句
+  let afterSignal = false;
+  for (const clause of clauseList) {
+    let rest = clause;
+    let signalIndex = -1;
+    let signalLength = 0;
+    for (const signal of SELF_CORRECTION_SIGNALS) {
+      const index = rest.lastIndexOf(signal);
+      if (index > signalIndex) {
+        signalIndex = index;
+        signalLength = signal.length;
+      }
+    }
+    if (signalIndex === 0) {
+      kept.pop();
+      rest = rest.slice(signalLength);
+    } else if (signalIndex > 0) {
+      rest = rest.slice(signalIndex + signalLength);
+    }
+    // 「不對，是五點」的「是」屬於更正句型本身，整理後通常不會留下
+    if ((signalIndex >= 0 || afterSignal) && rest.startsWith("是")) {
+      rest = rest.slice(1);
+    }
+    afterSignal = signalIndex >= 0 && rest === "";
+    if (rest) kept.push(rest);
+  }
+  return kept.join(" ");
+}
+
+function presentPersonGroups(normalizedText: string): Set<string> {
+  return new Set(
+    PERSON_GROUPS.filter((group) =>
+      group.chars.some((c) => normalizedText.includes(c)),
+    ).map((group) => group.id),
+  );
+}
+
+/** 原文（已去除贅詞）的字元有多少比例出現在輸出中（0~1） */
+function charRetention(rawCore: string, enhanced: string): number {
+  let core = rawCore;
+  for (const filler of DRIFT_FILLER_WORDS) core = core.split(filler).join("");
+  if (core.length === 0) return 1;
+  const enhancedChars = new Set(enhanced);
+  let retained = 0;
+  for (const c of core) {
+    if (enhancedChars.has(c)) retained += 1;
+  }
+  return retained / [...core].length;
+}
+
+/**
+ * 增強後語意偏移偵測（#43 核心守衛，#30 擴充）。任一判準成立即判定飄移：
  *
- * 校對/整理的產出理應與原文高度重疊（同樣的字詞、只是修標點順句）；
- * 若模型「答非所問」或自由發揮，產出會用完全不同的字詞 → bigram 幾乎不落在原文內。
- * 用 enhanced→raw 的 bigram containment 當指標：長度差異不懲罰（raw 較長不影響），
- * 只看「產出有多少 grounded 在原文」。門檻刻意保守、只擋明顯不相干。
+ * 1. bigram containment（#43）：enhanced 的 bigram 落在 raw 內的比例過低 → 整段答非所問。
+ * 2. 原文字元保留率（#30）：原文去除贅詞與自我更正片段後，字元出現在輸出中的比例過低 → 內容被換掉或漏掉。
+ * 3. 人稱變動（#30）：原文的第一／第二人稱組在輸出整組消失，或輸出多出原文沒有的人稱組 → 我你對調。
+ * 4. 否定詞由有變無（#30）：原文有否定詞、輸出完全沒有；數量變化本身不算（自我更正、「不是不是」會改變數量）。
+ * 5. 回應語開頭（#30）：輸出以「好的」「抱歉」這類回應語開頭，原文卻沒有這個詞。
  *
- * 注意：這是「長度爆炸」偵測之外的第二道、獨立的守衛；短輸入直接豁免。
+ * 判準 2～4 的「原文」先移除自我更正片段（不對、我是說、講錯了…），避免合法更正被誤判；
+ * 「多出人稱組」與回應語則比對完整原文。這是「長度爆炸」偵測之外的獨立守衛；短輸入直接豁免。
  */
 export function detectSemanticDrift(
   rawText: string,
@@ -140,14 +255,14 @@ export function detectSemanticDrift(
 
   // 極短原文不可靠、或 enhanced 為空 → 不在此判定 drift（交給 prompt / 既有守衛）
   if (raw.length < SEMANTIC_DRIFT_MIN_RAW_CHARS || enhanced.length === 0) {
-    return { isDrift: false, overlapRatio: 1 };
+    return { isDrift: false, overlapRatio: 1, charRetention: 1, reasons: [] };
   }
 
   const rawBigrams = toBigramSet(raw);
   const enhancedBigrams = toBigramSet(enhanced);
   // 單字元（無 bigram 可比）保護
   if (rawBigrams.size === 0 || enhancedBigrams.size === 0) {
-    return { isDrift: false, overlapRatio: 1 };
+    return { isDrift: false, overlapRatio: 1, charRetention: 1, reasons: [] };
   }
 
   let grounded = 0;
@@ -156,12 +271,48 @@ export function detectSemanticDrift(
   }
   const overlapRatio = grounded / enhancedBigrams.size;
 
+  const reasons: SemanticDriftReason[] = [];
+  if (overlapRatio < SEMANTIC_DRIFT_MIN_OVERLAP) {
+    reasons.push("low-bigram-overlap");
+  }
+
+  const rawCore = normalizeForOverlap(stripSelfCorrections(rawText));
+  const retention = charRetention(rawCore, enhanced);
+  if (retention < SEMANTIC_DRIFT_MIN_CHAR_RETENTION) {
+    reasons.push("low-char-retention");
+  }
+
+  const corePersons = presentPersonGroups(rawCore);
+  const rawPersons = presentPersonGroups(raw);
+  const enhancedPersons = presentPersonGroups(enhanced);
+  const personDropped = [...corePersons].some((id) => !enhancedPersons.has(id));
+  const personAdded = [...enhancedPersons].some((id) => !rawPersons.has(id));
+  if (personDropped || personAdded) {
+    reasons.push("person-changed");
+  }
+
+  if (
+    NEGATION_CHAR_PATTERN.test(rawCore) &&
+    !NEGATION_CHAR_PATTERN.test(enhanced)
+  ) {
+    reasons.push("negation-dropped");
+  }
+
+  if (
+    RESPONSE_OPENERS.some(
+      (opener) => enhanced.startsWith(opener) && !raw.includes(opener),
+    )
+  ) {
+    reasons.push("response-opener");
+  }
+
   return {
-    isDrift: overlapRatio < SEMANTIC_DRIFT_MIN_OVERLAP,
+    isDrift: reasons.length > 0,
     overlapRatio,
+    charRetention: retention,
+    reasons,
   };
 }
-
 // ── 轉錄幻覺偵測 ──
 
 export function detectHallucination(

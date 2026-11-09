@@ -1420,6 +1420,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
             modelId: settingsStore.selectedLlmModelId,
             signal: abortController?.signal,
             transcriptLocale: getEffectiveTranscriptLocale(),
+            wrapTranscript: true,
           };
 
           let enhanceResult = await enhanceText(
@@ -1462,7 +1463,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
           const shouldFallbackToRaw = finalAnomaly.isAnomaly || drift.isDrift;
           if (shouldFallbackToRaw) {
             writeErrorLog(
-              `useVoiceFlowStore: enhancement rejected (anomaly=${finalAnomaly.reason ?? "none"}, drift=${drift.isDrift}, overlap=${drift.overlapRatio.toFixed(2)}), falling back to raw text`,
+              `useVoiceFlowStore: enhancement rejected (anomaly=${finalAnomaly.reason ?? "none"}, drift=${drift.isDrift}, driftReasons=${drift.reasons.join("|") || "none"}, overlap=${drift.overlapRatio.toFixed(2)}, charRetention=${drift.charRetention.toFixed(2)}), falling back to raw text`,
             );
             enhanceResult = { ...enhanceResult, text: result.rawText };
           }
@@ -1743,6 +1744,8 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
       modelId: settingsStore.selectedLlmModelId,
       signal: abortController?.signal,
       transcriptLocale: getEffectiveTranscriptLocale(),
+      // 口述內容就是逐字稿，與錄音後文字整理同樣包成 <transcript>（#27）
+      wrapTranscript: true,
     };
 
     let enhanceResult = await enhanceText(voiceText, llmApiKey, enhanceOptions);
@@ -1768,7 +1771,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     const drift = detectSemanticDrift(voiceText, enhanceResult.text);
     if (anomaly.isAnomaly || drift.isDrift || enhanceResult.isRawFallback) {
       writeErrorLog(
-        `useVoiceFlowStore: replace enhancement rejected (anomaly=${anomaly.reason ?? "none"}, drift=${drift.isDrift}, overlap=${drift.overlapRatio.toFixed(2)}, emptyResponse=${enhanceResult.isRawFallback === true}), using voice text as is`,
+        `useVoiceFlowStore: replace enhancement rejected (anomaly=${anomaly.reason ?? "none"}, drift=${drift.isDrift}, driftReasons=${drift.reasons.join("|") || "none"}, overlap=${drift.overlapRatio.toFixed(2)}, charRetention=${drift.charRetention.toFixed(2)}, emptyResponse=${enhanceResult.isRawFallback === true}), using voice text as is`,
       );
       return { text: voiceText, wasEnhanced: false, usage };
     }
@@ -1899,6 +1902,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
             modelId: settingsStore.selectedLlmModelId,
             signal: abortController?.signal,
             transcriptLocale: getEffectiveTranscriptLocale(),
+            wrapTranscript: true,
           });
           if (isAborted.value) return;
 
@@ -1915,7 +1919,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
             resendAnomaly.isAnomaly || resendDrift.isDrift;
           if (shouldFallbackToRaw) {
             writeErrorLog(
-              `useVoiceFlowStore: resend enhancement rejected (anomaly=${resendAnomaly.reason ?? "none"}, drift=${resendDrift.isDrift}, overlap=${resendDrift.overlapRatio.toFixed(2)}), falling back to raw text`,
+              `useVoiceFlowStore: resend enhancement rejected (anomaly=${resendAnomaly.reason ?? "none"}, drift=${resendDrift.isDrift}, driftReasons=${resendDrift.reasons.join("|") || "none"}, overlap=${resendDrift.overlapRatio.toFixed(2)}, charRetention=${resendDrift.charRetention.toFixed(2)}), falling back to raw text`,
             );
             enhanceResult = { ...enhanceResult, text: result.rawText };
           }

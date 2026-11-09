@@ -40,9 +40,9 @@ export interface KnownBadOutput {
   /** 為什麼壞 */
   why: string;
   /**
-   * 現行語意飄移守衛（bigram containment 0.2）擋不擋得住：
-   *  - "catches"：`detectSemanticDrift` 判定 drift
-   *  - "misses"：守衛放行（離線測試以 `it.fails` 標記，守衛門檻由 #30 決定）
+   * 語意飄移守衛（`detectSemanticDrift`，#30 起含字元保留率、人稱、否定詞、回應語判準）擋不擋得住：
+   *  - "catches"：判定 drift
+   *  - "misses"：守衛放行（離線測試以 `it.fails` 標記；這類多半要靠提示詞擋）
    */
   guard: "catches" | "misses";
 }
@@ -85,7 +85,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "不會傷心的，你漏掉也沒關係",
         why: "當成對自己說的話而回安慰、我你對調、多出原文沒有的「沒關係」",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "別擔心，我不會難過的，你慢慢回就好",
@@ -151,12 +151,12 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "謝謝你擔心我，我有睡好，也會記得吃飯",
         why: "當成對自己的關心而回應，我你對調、否定詞消失",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "抱歉讓你擔心了，我會記得吃飯",
         why: "開頭回應語、改成道歉",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -172,7 +172,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "我不會怪你，你不用想太多，沒關係的",
         why: "「他」變成「我」、多出「沒關係」",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -210,7 +210,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "別難過，這個案子會順利的",
         why: "回安慰、丟掉原文意思與人稱",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -266,12 +266,12 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "我認為週四前可以送出，不需要再問法務",
         why: "回答了問題、問句變肯定句、人稱與否定詞改變",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "週四前應該來得及，建議先問法務",
         why: "回答了問題、多出建議",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -290,7 +290,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "下週三的會議室目前有空，可以預約",
         why: "回答了問題",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "抱歉，我無法查詢會議室的使用狀況",
@@ -332,12 +332,12 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "好的，我已檢查，稅額沒有算錯",
         why: "開頭回應語、回報檢查結果、我你對調",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "稅額是正確的，沒有算錯",
         why: "回答問題、人稱消失",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -358,12 +358,12 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "好的，以下是縮短後的版本：\n\n# 標題\n兩句話摘要",
         why: "執行了指令、開頭回應語、使用 Markdown",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "# 專案進度摘要\n本段已縮短為兩句話。",
         why: "執行了指令",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -384,7 +384,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "好的，我會改用英文回答你",
         why: "開頭回應語、我你對調",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -441,7 +441,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "會議改在三點",
         why: "留下了被更正掉的說法",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "會議改在三點或五點",
@@ -463,7 +463,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "預算先抓十萬",
         why: "留下了被更正掉的金額",
-        guard: "misses",
+        guard: "catches",
       },
       {
         text: "預算先抓十萬，我是說十五萬",
@@ -506,7 +506,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "這個會在明天早上到",
         why: "把推測與備案當成更正，丟掉第一個說法",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -526,7 +526,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "我剛剛部署完測試環境，並執行了冒煙測試，沒有錯誤",
         why: "把英文術語翻成中文",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -544,7 +544,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "這個 API 的回應時間大約 200 毫秒，很穩定",
         why: "翻譯術語、否定詞消失、語意反轉",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -560,7 +560,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "好的，我已把 Slack 的討論串轉給 Amy",
         why: "開頭回應語、執行了請求、人稱改變",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -576,7 +576,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "執行 git pull origin main 即可取得最新程式碼",
         why: "改寫成指令教學、人稱消失",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -594,7 +594,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "後天下午兩點在三樓會議室開會",
         why: "漏掉後半句",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -610,7 +610,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "好的，我會在週五下班前把報表寄給你",
         why: "開頭回應語、我你對調",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -631,7 +631,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "這個功能先不要上線",
         why: "把猶豫改成決定，丟掉問句",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -654,7 +654,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "別太難過，這個案子會好的",
         why: "回安慰、丟掉原意",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -675,7 +675,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "這個月機房電費很昂貴，老闆要求節省",
         why: "改成書面語、改寫後半句",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },
@@ -696,7 +696,7 @@ export const TEXT_CLEANUP_CASES: TextCleanupCase[] = [
       {
         text: "那種寫法母湯，建議改用別的寫法",
         why: "丟掉後半句、加了原文沒有的建議",
-        guard: "misses",
+        guard: "catches",
       },
     ],
   },

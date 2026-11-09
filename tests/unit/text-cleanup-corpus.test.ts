@@ -5,11 +5,8 @@ import {
   type TextCleanupCategory,
 } from "../support/fixtures/text-cleanup-cases";
 import { judgeCleanupOutput } from "../support/text-cleanup-judge";
-import {
-  detectSemanticDrift,
-  SEMANTIC_DRIFT_MIN_OVERLAP,
-} from "../../src/lib/hallucinationDetector";
-import { IMPROVED_PROMPT_EXAMPLE_TRANSCRIPTS } from "../eval/prompt-variants";
+import { detectSemanticDrift } from "../../src/lib/hallucinationDetector";
+import { ACTIVE_PROMPT_EXAMPLE_TRANSCRIPTS } from "../../src/i18n/prompts";
 
 /**
  * 文字整理回歸語料集的離線測試（wayfinder #33）。
@@ -17,10 +14,10 @@ import { IMPROVED_PROMPT_EXAMPLE_TRANSCRIPTS } from "../eval/prompt-variants";
  * 三件事：
  *  1. 語料集本身結構完整（8 類、每案有可接受輸出與壞輸出範本）
  *  2. 斷言判定自洽（可接受輸出全過、壞輸出至少違反一條）
- *  3. 現行語意飄移守衛（bigram containment）對每個範本的表現
+ *  3. 語意飄移守衛（bigram containment＋#30 四個判準）對每個範本的表現
  *
- * 現行 bigram 0.2 門檻擋不住的壞輸出以 `it.fails` 標記：守衛本身不在這裡改（#30 的決策），
- * #30 調整守衛後，擋住了的範本會讓 `it.fails` 變紅，提醒把 `guard` 改回 "catches"。
+ * 守衛擋不住的壞輸出以 `it.fails` 標記；之後調整守衛而擋住了的範本會讓 `it.fails` 變紅，
+ * 提醒把 `guard` 改回 "catches"。可接受輸出被誤判是硬性失敗（#30 校準規則）。
  */
 
 describe("文字整理回歸語料集", () => {
@@ -53,9 +50,9 @@ describe("文字整理回歸語料集", () => {
       }
     });
 
-    it("改良版提示詞的 few-shot 範例不與語料集輸入相同（避免灌水通過率）", () => {
+    it("zh-TW 積極版的 few-shot 範例不與語料集輸入相同（避免灌水通過率）", () => {
       const inputs = new Set(TEXT_CLEANUP_CASES.map((c) => c.input));
-      for (const transcript of IMPROVED_PROMPT_EXAMPLE_TRANSCRIPTS) {
+      for (const transcript of ACTIVE_PROMPT_EXAMPLE_TRANSCRIPTS) {
         expect(inputs.has(transcript), transcript).toBe(false);
       }
     });
@@ -87,14 +84,14 @@ describe("文字整理回歸語料集", () => {
     });
   });
 
-  describe("現行語意飄移守衛（bigram containment）", () => {
+  describe("語意飄移守衛（#43 bigram＋#30 新判準）", () => {
     for (const c of TEXT_CLEANUP_CASES) {
       it(`${c.id}：可接受輸出不會被誤判成飄移`, () => {
         for (const output of c.acceptableOutputs) {
           const drift = detectSemanticDrift(c.input, output);
           expect(
             drift.isDrift,
-            `${output}（overlap ${drift.overlapRatio.toFixed(2)}）`,
+            `${output}（${drift.reasons.join("、")}）`,
           ).toBe(false);
         }
       });
@@ -105,13 +102,13 @@ describe("文字整理回歸語料集", () => {
           const drift = detectSemanticDrift(c.input, bad.text);
           expect(
             drift.isDrift,
-            `overlap ${drift.overlapRatio.toFixed(2)}，門檻 ${SEMANTIC_DRIFT_MIN_OVERLAP}`,
+            `overlap ${drift.overlapRatio.toFixed(2)}、字元保留率 ${drift.charRetention.toFixed(2)}`,
           ).toBe(true);
         };
         if (bad.guard === "catches") {
           it(title, assertCaught);
         } else {
-          // 現行 0.2 門檻擋不住；#30 調整守衛後這裡會轉紅，屆時改回 "catches"
+          // 守衛擋不住（多半要靠提示詞）；之後守衛擋住了這裡會轉紅，屆時改回 "catches"
           it.fails(`[守衛漏接] ${title}`, assertCaught);
         }
       });

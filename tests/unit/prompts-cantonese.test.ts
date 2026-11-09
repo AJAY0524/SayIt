@@ -22,7 +22,7 @@ describe("prompts — 廣東話（yue）", () => {
     expect(getMinimalPromptForLocale("yue")).toBe(expected);
   });
 
-  it("[P0] 積極版：繁中版只換第 4 行語言句，其餘逐字相同", () => {
+  it("[P0] 積極版：繁中版只換「直接輸出」那行的語言句，其餘逐字相同", () => {
     const zhTW = getPromptForModeAndLocale("active", "zh-TW");
     const expected = zhTW.replace(
       "直接輸出處理後的文字，使用繁體中文\n",

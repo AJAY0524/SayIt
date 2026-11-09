@@ -148,6 +148,22 @@ describe("llmProvider.ts", () => {
       expect(sonnet.output_config).toEqual({ effort: "low" });
     });
 
+    it("[P0] Haiku 5.5 帶 effort 時送 output_config.effort（thinking 仍關閉）；Sonnet 5.5 與舊模型不受影響", () => {
+      const build = (model: string) =>
+        JSON.parse(
+          buildFetchParams(
+            "anthropic",
+            { ...BASE_REQUEST, model, effort: "high" },
+            TEST_API_KEY,
+          ).init.body as string,
+        );
+      const haiku = build("claude-haiku-5-5");
+      expect(haiku.thinking).toEqual({ type: "disabled" });
+      expect(haiku.output_config).toEqual({ effort: "high" });
+      expect(build("claude-sonnet-5-5").output_config).toEqual({ effort: "low" });
+      expect(build("claude-haiku-4-5-20251001").output_config).toBeUndefined();
+    });
+
     it("[P0] Anthropic 舊模型（Haiku 4.5）：仍送 temperature，不帶 thinking / output_config", () => {
       const body = JSON.parse(
         buildFetchParams(

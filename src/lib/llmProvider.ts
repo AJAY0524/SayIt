@@ -82,11 +82,16 @@ export interface LlmChatMessage {
   content: string;
 }
 
+/** Anthropic `output_config.effort` 等級；Haiku 5.5 在 thinking 關閉時只接受 low／medium／high */
+export type LlmEffort = "low" | "medium" | "high";
+
 export interface LlmChatRequest {
   model: string;
   messages: LlmChatMessage[];
   temperature?: number;
   maxTokens?: number;
+  /** 只對 Claude Haiku 5.5 生效；不傳等同官方預設 medium */
+  effort?: LlmEffort;
 }
 
 export interface LlmUsageData {
@@ -211,13 +216,15 @@ function buildAnthropicFetchParams(
   if (isClaude55Model(request.model)) {
     // 5.5 世代：非預設的 temperature 會回 400（"`temperature` is deprecated"），一律不送；
     // 預設啟用思考會拖慢速度與費用，文字整理不需要，改為關閉思考。
-    // Haiku 5.5：thinking 已 disabled，effort 是思考強度調節器而無意義，不送；
+    // Haiku 5.5：thinking 關閉時 effort 仍作用於所有輸出 token（官方：works with or without thinking），
+    // 省略等同 medium；由呼叫端依用途決定是否送（文字整理見 #31 第 7 條）。xhigh／max 在 thinking 關閉時會回 400。
     // Sonnet 5.5：disabled 會回 400，改用 between_tools 搭配 effort low 略過前置思考
     if (request.model === "claude-sonnet-5-5") {
       body.thinking = { type: "between_tools" };
       body.output_config = { effort: "low" };
     } else {
       body.thinking = { type: "disabled" };
+      if (request.effort) body.output_config = { effort: request.effort };
     }
   } else if (request.temperature !== undefined) {
     body.temperature = request.temperature;

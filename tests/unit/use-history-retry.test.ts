@@ -365,7 +365,10 @@ describe("useHistoryStore retry", () => {
         expect(h.mockEnhanceGuard).toHaveBeenCalledWith(
           "原始口語內容",
           expect.any(String),
-          expect.objectContaining({ transcriptLocale: expected }),
+          expect.objectContaining({
+            transcriptLocale: expected,
+            wrapTranscript: true,
+          }),
         );
       },
     );

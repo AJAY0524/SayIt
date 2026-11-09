@@ -10,6 +10,7 @@ import {
   LAYER2B_PEAK_ENERGY_CEILING,
   ENHANCEMENT_LENGTH_EXPLOSION_RATIO,
   detectSemanticDrift,
+  SEMANTIC_DRIFT_MIN_CHAR_RETENTION,
   SEMANTIC_DRIFT_MIN_OVERLAP,
 } from "../../src/lib/hallucinationDetector";
 
@@ -406,7 +407,7 @@ describe("hallucinationDetector.ts", () => {
     it("[P0] 去口語贅字的校對不應判定 drift", () => {
       const r = detectSemanticDrift(
         "呃我想說我們明天要不要約個時間開會討論一下",
-        "我想我們明天要約時間開會討論一下",
+        "我想我們明天要不要約個時間開會討論一下",
       );
       expect(r.isDrift).toBe(false);
     });
@@ -452,6 +453,109 @@ describe("hallucinationDetector.ts", () => {
     it("[P0] #83 簡體答非所問仍判定 drift", () => {
       const r = detectSemanticDrift(TRADITIONAL_TEXT, "好的请问有什么可以帮您的吗");
       expect(r.isDrift).toBe(true);
+    });
+    describe("#30 新判準", () => {
+      it("[P0] 回成安慰句（我你對調、否定詞換位）判定 drift", () => {
+        const r = detectSemanticDrift(
+          "不會急啦我只是怕漏掉你的訊息你會傷心",
+          "不會傷心的，你漏掉也沒關係",
+        );
+        expect(r.isDrift).toBe(true);
+        expect(r.reasons).toContain("low-char-retention");
+        expect(r.reasons).toContain("person-changed");
+      });
+
+      it("[P0] 原文字元保留率過低判定 drift，並回報保留率", () => {
+        const r = detectSemanticDrift(
+          "這個月機房電費很燒老闆要我們想辦法",
+          "這個月機房電費很高",
+        );
+        expect(r.reasons).toContain("low-char-retention");
+        expect(r.charRetention).toBeLessThan(SEMANTIC_DRIFT_MIN_CHAR_RETENTION);
+      });
+
+      it("[P0] 贅詞刪除不拉低字元保留率", () => {
+        const r = detectSemanticDrift(
+          "嗯 那個 就是 然後 我們明天開會",
+          "我們明天開會",
+        );
+        expect(r.isDrift).toBe(false);
+        expect(r.charRetention).toBe(1);
+      });
+
+      it("[P0] 原文的第一人稱整組消失判定 drift", () => {
+        const r = detectSemanticDrift(
+          "我剛剛發現資料庫的連線逾時了",
+          "剛剛發現資料庫的連線逾時了",
+        );
+        expect(r.reasons).toEqual(["person-changed"]);
+      });
+
+      it("[P0] 輸出多出原文沒有的人稱組判定 drift", () => {
+        const r = detectSemanticDrift(
+          "後天下午兩點在三樓會議室開會",
+          "我們後天下午兩點在三樓會議室開會",
+        );
+        expect(r.reasons).toContain("person-changed");
+      });
+
+      it("[P1] 你／妳／您互換不算人稱變動", () => {
+        const r = detectSemanticDrift(
+          "妳不用急著回我的訊息",
+          "你不用急著回我的訊息",
+        );
+        expect(r.reasons).not.toContain("person-changed");
+      });
+
+      it("[P0] 否定詞由有變無判定 drift", () => {
+        const r = detectSemanticDrift(
+          "我們明天要不要約個時間開會",
+          "我們明天要約個時間開會",
+        );
+        expect(r.reasons).toEqual(["negation-dropped"]);
+      });
+
+      it("[P1] 否定詞數量變化本身不算（「不是不是」）", () => {
+        const r = detectSemanticDrift(
+          "不是不是 我是說明天早上交",
+          "不是，我是說明天早上交",
+        );
+        expect(r.reasons).not.toContain("negation-dropped");
+      });
+
+      it("[P0] 回應語開頭判定 drift；原文本身就有這個詞時不算", () => {
+        expect(
+          detectSemanticDrift(
+            "你不用急著回我只是想確認你有看到",
+            "好的，你不用急著回我，只是想確認你有看到",
+          ).reasons,
+        ).toEqual(["response-opener"]);
+        expect(
+          detectSemanticDrift("嗯好的我等一下就過去", "好的，我等一下就過去")
+            .reasons,
+        ).toEqual([]);
+      });
+
+      it("[P0] 自我更正（不對／我是說／講錯了）不被誤判", () => {
+        const cases: [string, string][] = [
+          ["會議改在三點 不對 是五點", "會議改在五點"],
+          ["預算先抓十萬 我是說十五萬", "預算先抓十五萬"],
+          ["禮拜二交件 講錯了 禮拜三交件", "禮拜三交件"],
+          ["會議改在三點不對是五點", "會議改在五點"],
+        ];
+        for (const [raw, enhanced] of cases) {
+          const r = detectSemanticDrift(raw, enhanced);
+          expect(r.reasons, raw).toEqual([]);
+        }
+      });
+
+      it("[P1] 自我更正後多出原文沒有的人稱仍判定 drift", () => {
+        const r = detectSemanticDrift(
+          "預算先抓十萬 我是說十五萬",
+          "你預算先抓十五萬",
+        );
+        expect(r.reasons).toContain("person-changed");
+      });
     });
   });
 });

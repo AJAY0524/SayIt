@@ -867,6 +867,7 @@ export const useHistoryStore = defineStore("history", () => {
           vocabularyTermList: termList.length > 0 ? termList : undefined,
           modelId: settingsStore.selectedLlmModelId,
           transcriptLocale: getEffectiveTranscriptLocale(settingsStore),
+          wrapTranscript: true,
         },
       );
     } catch (err) {
@@ -888,7 +889,7 @@ export const useHistoryStore = defineStore("history", () => {
       return { ok: false, errorKey: "history.reEnhanceFailed" };
     }
 
-    // #43 語意飄移守衛：整理結果與原文 bigram 重疊過低（疑似答非所問）→
+    // #43／#30 語意飄移守衛（bigram、字元保留率、人稱、否定詞、回應語）→
     // 拒絕並保留既有結果、不覆寫 DB，並以 reEnhanceDrift 訊息提示使用者。
     if (enhanceResult.wasDrift) {
       return { ok: false, errorKey: "history.reEnhanceDrift" };
