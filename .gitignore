@@ -38,3 +38,6 @@ playwright/.auth/
 
 # Auto-generated documentation scanner output
 docs/project-scan-report.json
+
+# 文字整理實打評測報告（含模型實際輸出，不進 repo）
+tests/eval/results/
