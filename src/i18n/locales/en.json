@@ -343,6 +343,7 @@
     "editMode": "Edit",
     "editing": "Editing...",
     "editSuccess": "Edited ✓",
+    "replaceSuccess": "Re-entered ✓",
     "editFailed": "Edit failed",
     "recordingTooShort": "Recording too short",
     "vocabularyLearnedLabel": "Added to dictionary",

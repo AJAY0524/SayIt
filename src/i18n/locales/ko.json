@@ -343,6 +343,7 @@
     "editMode": "편집",
     "editing": "편집 중...",
     "editSuccess": "편집 완료 ✓",
+    "replaceSuccess": "다시 입력됨 ✓",
     "editFailed": "편집 실패",
     "recordingTooShort": "녹음 시간이 너무 짧습니다",
     "vocabularyLearnedLabel": "사전에 추가",
