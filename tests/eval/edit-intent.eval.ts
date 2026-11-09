@@ -9,7 +9,8 @@
  *   → 報告寫到 `tests/eval/results/`（已加入 .gitignore，不進 repo）
  *
  * 環境變數：
- *   ANTHROPIC_API_KEY  必填，且只從這裡讀（不讀 App 設定、不寫進檔案）；沒設定就整份略過
+ *   ANTHROPIC_API_KEY  必填（不讀 App 設定、不寫進檔案）；沒設定時 vitest.eval.config.ts 會改讀 repo 外層 `.env`，
+ *                      兩邊都沒有就整份略過
  *   EVAL_RUNS          每案跑幾次，預設 5
  *   EVAL_CASES         只跑指定案例 id 或類型（instruction／retype，逗號分隔），預設全部
  *   EVAL_CONCURRENCY   同時進行的請求數，預設 3

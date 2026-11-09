@@ -2,15 +2,16 @@
  * 文字整理實打評測（#33 建立，#35 改成定案結構）。
  *
  * 用 `pnpm eval:cleanup` 手動執行，不進 CI。流程：
- *   語料集每案 × 每個提示詞版本 × 每個 effort × N 次 → 呼叫真正的 `enhanceText`（打 Claude Haiku 5.5，
- *   依版本開啟 `wrapTranscript`）→ 套用斷言式判定（`tests/support/text-cleanup-judge.ts`）
+ *   語料集每案 × 每個提示詞版本 × 每個 effort × N 次 → 呼叫真正的 `cleanupTranscript`（打 Claude Haiku 5.5；
+ *   無包裝的對照版本改用 `enhanceText`）→ 套用斷言式判定（`tests/support/text-cleanup-judge.ts`）
  *   → N 次全過才算該案通過 → 報告寫到 `tests/eval/results/`（已加入 .gitignore，不進 repo）
  *
  * 報告另外記錄：每次呼叫的延遲（中位數／P90，#31 第 7 條）、模型有沒有抄回 `<transcript>` 標籤（#27）、
  * 語意飄移守衛對失敗輸出的攔截數與對通過輸出的誤擋數（#30 硬性條件：誤擋必須是 0）。
  *
  * 環境變數：
- *   ANTHROPIC_API_KEY  必填，且只從這裡讀（不讀 App 設定、不寫進檔案）；沒設定就整份略過
+ *   ANTHROPIC_API_KEY  必填（不讀 App 設定、不寫進檔案）；沒設定時 vitest.eval.config.ts 會改讀 repo 外層 `.env`，
+ *                      兩邊都沒有就整份略過
  *   EVAL_RUNS          每案每版本跑幾次，預設 5
  *   EVAL_VARIANTS      只跑指定提示詞版本（逗號分隔 id），預設全部
  *   EVAL_EFFORTS       要比較的 effort（逗號分隔，low／medium／high），預設只跑 App 的文字整理預設值
@@ -46,6 +47,7 @@ vi.mock("@tauri-apps/plugin-http", () => ({
 }));
 
 import {
+  cleanupTranscript,
   enhanceText,
   EnhancerApiError,
   TEXT_CLEANUP_EFFORT,
@@ -172,13 +174,17 @@ async function runOnce(
     try {
       const startedAt = performance.now();
       const result = await callContext.run(observation, () =>
-        enhanceText(testCase.input, API_KEY, {
-          systemPrompt: config.variant.systemPrompt,
-          modelId: MODEL_ID,
-          transcriptLocale: "zh-TW",
-          wrapTranscript: config.variant.wrapTranscript,
-          effort: config.effort,
-        }),
+        // 有包裝的版本走 App 的文字整理路徑；舊版提示詞（無包裝）原文直送作為對照
+        (config.variant.wrapTranscript ? cleanupTranscript : enhanceText)(
+          testCase.input,
+          API_KEY,
+          {
+            systemPrompt: config.variant.systemPrompt,
+            modelId: MODEL_ID,
+            transcriptLocale: "zh-TW",
+            effort: config.effort,
+          },
+        ),
       );
       const latencyMs = performance.now() - startedAt;
       const emptyResponse = result.isRawFallback === true;

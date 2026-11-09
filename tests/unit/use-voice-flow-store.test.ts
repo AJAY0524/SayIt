@@ -8,6 +8,7 @@ const {
   mockEmit,
   mockInvoke,
   mockEnhanceText,
+  mockCleanupTranscript,
   mockGetCurrentWindow,
   mockWebviewWindowGetByLabel,
   mockMainWindowShow,
@@ -71,6 +72,9 @@ const {
     mockEnhanceText: vi
       .fn()
       .mockResolvedValue({ text: "AI 整理後的書面語文字", usage: null }),
+    // 文字整理走 cleanupTranscript；beforeEach 讓它轉呼叫 mockEnhanceText，
+    // 共用回傳值與呼叫次數，要分辨走哪條路徑時斷言這個 mock
+    mockCleanupTranscript: vi.fn(),
     mockGetCurrentWindow: vi.fn(() => ({
       show: vi.fn().mockResolvedValue(undefined),
       hide: vi.fn().mockResolvedValue(undefined),
@@ -144,6 +148,7 @@ vi.mock("../../src/lib/enhancer", () => {
   }
   return {
     enhanceText: mockEnhanceText,
+    cleanupTranscript: mockCleanupTranscript,
     buildSystemPrompt: (basePrompt: string) => basePrompt,
     EnhancerApiError,
   };
@@ -327,6 +332,9 @@ describe("useVoiceFlowStore", () => {
     mockEnhanceText
       .mockClear()
       .mockResolvedValue({ text: "AI 整理後的書面語文字", usage: null });
+    mockCleanupTranscript
+      .mockClear()
+      .mockImplementation((...args: unknown[]) => mockEnhanceText(...args));
     mockLoadSettings.mockClear().mockResolvedValue(undefined);
     mockSettingsState.apiKey = "test-api-key-123";
     mockSettingsState.aiPrompt = "自訂 prompt 內容";
@@ -621,13 +629,13 @@ describe("useVoiceFlowStore", () => {
       });
 
       expect(mockEnhanceText).toHaveBeenCalledTimes(2);
-      // 第二次呼叫＝一般文字整理：口述內容原文、使用者的 AI 提示詞，且帶 transcriptLocale 與 <transcript> 包裝（#27）
-      expect(mockEnhanceText.mock.calls[1][0]).toBe("測試轉錄");
-      expect(mockEnhanceText.mock.calls[1][2]).toEqual(
+      // 第二次呼叫＝一般文字整理：走 cleanupTranscript（<transcript> 包裝，#27），帶口述內容原文、使用者的 AI 提示詞與 transcriptLocale
+      expect(mockCleanupTranscript).toHaveBeenCalledTimes(1);
+      expect(mockCleanupTranscript.mock.calls[0][0]).toBe("測試轉錄");
+      expect(mockCleanupTranscript.mock.calls[0][2]).toEqual(
         expect.objectContaining({
           systemPrompt: "自訂 prompt 內容",
           transcriptLocale: expect.any(String),
-          wrapTranscript: true,
         }),
       );
       expect(store.message).toBe("voiceFlow.replaceSuccess");
@@ -802,9 +810,11 @@ describe("useVoiceFlowStore", () => {
       expect(mockEnhanceText.mock.calls[0][2]).not.toHaveProperty(
         "transcriptLocale",
       );
-      // #27：<transcript> 包裝只套用在文字整理，選取文字語音改寫不包
-      expect(mockEnhanceText.mock.calls[0][2]).not.toHaveProperty(
-        "wrapTranscript",
+      // #27：<transcript> 包裝只套用在文字整理，選取文字語音改寫走 enhanceText 不包
+      expect(mockCleanupTranscript).not.toHaveBeenCalledWith(
+        expect.stringContaining("<selected_text>"),
+        expect.anything(),
+        expect.anything(),
       );
       expect(mockInvoke).not.toHaveBeenCalledWith("read_selected_text");
     });
@@ -1367,12 +1377,11 @@ describe("useVoiceFlowStore", () => {
           expect(mockEnhanceText).toHaveBeenCalledTimes(1);
         });
 
-        expect(mockEnhanceText).toHaveBeenCalledWith(
+        expect(mockCleanupTranscript).toHaveBeenCalledWith(
           longText,
           "test-api-key-123",
           expect.objectContaining({
             transcriptLocale: expected,
-            wrapTranscript: true,
           }),
         );
       },
@@ -2633,12 +2642,11 @@ describe("useVoiceFlowStore", () => {
       await store.handleRetryTranscription();
 
       await vi.waitFor(() => {
-        expect(mockEnhanceText).toHaveBeenCalledWith(
+        expect(mockCleanupTranscript).toHaveBeenCalledWith(
           longText,
           "test-api-key-123",
           expect.objectContaining({
             transcriptLocale: "en",
-            wrapTranscript: true,
           }),
         );
       });

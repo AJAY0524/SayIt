@@ -367,7 +367,6 @@ describe("useHistoryStore retry", () => {
           expect.any(String),
           expect.objectContaining({
             transcriptLocale: expected,
-            wrapTranscript: true,
           }),
         );
       },
