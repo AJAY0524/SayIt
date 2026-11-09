@@ -72,9 +72,9 @@ export function wrapTranscriptMessage(rawText: string): string {
   return `<transcript>\n${rawText}\n</transcript>`;
 }
 
-/** 剝除模型抄回來的 `<transcript>` 標籤（只去標籤、保留內容） */
+/** 剝除模型抄回來的 `<transcript>` 標籤（只去標籤、保留內容；不分大小寫） */
 export function stripTranscriptTags(text: string): string {
-  return text.replace(/<\/?transcript>/g, "").trim();
+  return text.replace(/<\/?transcript>/gi, "").trim();
 }
 
 async function withTimeout<T>(

@@ -621,12 +621,13 @@ describe("useVoiceFlowStore", () => {
       });
 
       expect(mockEnhanceText).toHaveBeenCalledTimes(2);
-      // 第二次呼叫＝一般文字整理：口述內容原文、使用者的 AI 提示詞，且帶 transcriptLocale
+      // 第二次呼叫＝一般文字整理：口述內容原文、使用者的 AI 提示詞，且帶 transcriptLocale 與 <transcript> 包裝（#27）
       expect(mockEnhanceText.mock.calls[1][0]).toBe("測試轉錄");
       expect(mockEnhanceText.mock.calls[1][2]).toEqual(
         expect.objectContaining({
           systemPrompt: "自訂 prompt 內容",
           transcriptLocale: expect.any(String),
+          wrapTranscript: true,
         }),
       );
       expect(store.message).toBe("voiceFlow.replaceSuccess");

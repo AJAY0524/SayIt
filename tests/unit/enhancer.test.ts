@@ -397,6 +397,17 @@ describe("enhancer.ts", () => {
       expect(result.isRawFallback).toBeUndefined();
     });
 
+    it("[P1] 剝除標籤不分大小寫", async () => {
+      mockFetch.mockResolvedValue(
+        createSuccessResponse("<Transcript>整理後的文字</TRANSCRIPT>"),
+      );
+      const { enhanceText } = await import("../../src/lib/enhancer");
+      const result = await enhanceText("原始逐字稿", TEST_API_KEY, {
+        wrapTranscript: true,
+      });
+      expect(result.text).toBe("整理後的文字");
+    });
+
     it("[P0] 只抄回空標籤視為空回應，退回原文", async () => {
       mockFetch.mockResolvedValue(
         createSuccessResponse("<transcript></transcript>"),
