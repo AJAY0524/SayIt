@@ -15,6 +15,11 @@ import { captureError } from "../lib/sentry";
 import { logInfoLine, logErrorLine } from "../lib/logger";
 import { enhanceText, buildSystemPrompt } from "../lib/enhancer";
 import { getEditModePromptForLocale } from "../i18n/prompts";
+import {
+  buildEditUserMessage,
+  parseEditResponse,
+  resolveEditIntent,
+} from "../lib/editIntent";
 import type { SupportedLocale } from "../i18n/languageConfig";
 import { analyzeCorrections } from "../lib/vocabularyAnalyzer";
 import { applyTranscriptTextTransforms as applySharedTranscriptTextTransforms } from "../lib/transcriptTextTransforms";
@@ -1607,47 +1612,90 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
       }
 
       const locale = i18n.global.locale.value as SupportedLocale;
-      const basePrompt = getEditModePromptForLocale(locale);
-      const systemPrompt = buildSystemPrompt(
-        `${basePrompt}\n\n<instruction>\n${params.voiceInstruction}\n</instruction>`,
-      );
+      // 選取文字與口述內容都放 user 訊息（#36）；system prompt 只放規則與結構說明
+      const systemPrompt = buildSystemPrompt(getEditModePromptForLocale(locale));
 
-      const editResult = await enhanceText(params.selectedText, llmApiKey, {
-        systemPrompt,
-        modelId: settingsStore.selectedLlmModelId,
-        signal: abortController?.signal,
-        maxTokens: EDIT_MODE_MAX_TOKENS,
-      });
+      const editResult = await enhanceText(
+        buildEditUserMessage(params.selectedText, params.voiceInstruction),
+        llmApiKey,
+        {
+          systemPrompt,
+          modelId: settingsStore.selectedLlmModelId,
+          signal: abortController?.signal,
+          maxTokens: EDIT_MODE_MAX_TOKENS,
+        },
+      );
+      if (isAborted.value) return;
+
+      // 空回應時 enhanceText 退回的是送出的 user 訊息，不可當成模型輸出
+      const parsed = parseEditResponse(editResult.isRawFallback ? "" : editResult.text);
+      const resolved = resolveEditIntent(parsed, params.selectedText);
+
+      if (resolved.intent === "edit") {
+        const editDurationMs = performance.now() - editStartTime;
+
+        const record = buildTranscriptionRecord({
+          id: params.transcriptionId,
+          rawText: params.voiceInstruction,
+          processedText: parsed.body,
+          recordingDurationMs: params.recordingDurationMs,
+          transcriptionDurationMs: params.transcriptionDurationMs,
+          enhancementDurationMs: editDurationMs,
+          wasEnhanced: true,
+          audioFilePath: params.audioFilePath,
+          status: "success",
+          isEditMode: true,
+          editSourceText: params.selectedText,
+        });
+
+        writeInfoLog(`Edit mode result: "${parsed.body}"`);
+
+        await completePasteFlow({
+          text: parsed.body,
+          successMessage: t("voiceFlow.editSuccess"),
+          record,
+          chatUsage: editResult.usage,
+        });
+
+        writeInfoLog(
+          `useVoiceFlowStore: edit mode completed, instruction="${params.voiceInstruction}", editDurationMs=${Math.round(editDurationMs)}`,
+        );
+        return;
+      }
+
+      // 重講：口述內容是要取代選取文字的新內容，走一般文字整理流程（#28 決議）
+      writeInfoLog(
+        `useVoiceFlowStore: edit mode intent=replace (${resolved.viaFallback ? "same-as-selection fallback" : "model"}), re-entering via text cleanup`,
+      );
+      const replaceText = await enhanceReplacementText(
+        params.voiceInstruction,
+        llmApiKey,
+      );
       if (isAborted.value) return;
 
       const editDurationMs = performance.now() - editStartTime;
-
       const record = buildTranscriptionRecord({
         id: params.transcriptionId,
         rawText: params.voiceInstruction,
-        processedText: editResult.text,
+        processedText: replaceText.text,
         recordingDurationMs: params.recordingDurationMs,
         transcriptionDurationMs: params.transcriptionDurationMs,
         enhancementDurationMs: editDurationMs,
-        wasEnhanced: true,
+        wasEnhanced: replaceText.wasEnhanced,
         audioFilePath: params.audioFilePath,
         status: "success",
         isEditMode: true,
         editSourceText: params.selectedText,
       });
 
-      writeInfoLog(`Edit mode result: "${editResult.text}"`);
+      writeInfoLog(`Edit mode replace result: "${replaceText.text}"`);
 
       await completePasteFlow({
-        text: editResult.text,
-        successMessage: t("voiceFlow.editSuccess"),
+        text: replaceText.text,
+        successMessage: t("voiceFlow.replaceSuccess"),
         record,
-        chatUsage: editResult.usage,
+        chatUsage: mergeChatUsage(editResult.usage, replaceText.usage),
       });
-
-      writeInfoLog(
-        `useVoiceFlowStore: edit mode completed, instruction="${params.voiceInstruction}", editDurationMs=${Math.round(editDurationMs)}`,
-      );
     } catch (editError) {
       if (isAborted.value) return;
       writeErrorLog(
@@ -1664,6 +1712,86 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     } finally {
       editSourceText.value = null;
     }
+  }
+
+  /**
+   * 選取文字語音改寫判為「重講」時，整理口述內容：選項、守衛與錄音後文字整理相同
+   * （使用者的 AI 提示詞、字典、整理門檻、長度爆炸與語意飄移守衛）。
+   * 守衛攔下或低於整理門檻時，直接用口述原文取代選取文字。
+   * LLM 呼叫失敗會往外拋，由呼叫端走編輯失敗流程（不貼上，保留選取文字）。
+   */
+  async function enhanceReplacementText(
+    voiceText: string,
+    llmApiKey: string,
+  ): Promise<{
+    text: string;
+    wasEnhanced: boolean;
+    usage: ChatUsageData | null;
+  }> {
+    const settingsStore = useSettingsStore();
+    if (
+      settingsStore.isEnhancementThresholdEnabled &&
+      voiceText.length < settingsStore.enhancementThresholdCharCount
+    ) {
+      return { text: voiceText, wasEnhanced: false, usage: null };
+    }
+
+    const vocabularyStore = useVocabularyStore();
+    const termList = await vocabularyStore.getTopTermListByWeight(50);
+    const enhanceOptions = {
+      systemPrompt: settingsStore.getAiPrompt(),
+      vocabularyTermList: termList.length > 0 ? termList : undefined,
+      modelId: settingsStore.selectedLlmModelId,
+      signal: abortController?.signal,
+      transcriptLocale: getEffectiveTranscriptLocale(),
+    };
+
+    let enhanceResult = await enhanceText(voiceText, llmApiKey, enhanceOptions);
+    let usage = enhanceResult.usage;
+    let retryCount = 0;
+    while (
+      !isAborted.value &&
+      retryCount < MAX_ENHANCEMENT_RETRY_COUNT &&
+      detectEnhancementAnomaly({
+        rawText: voiceText,
+        enhancedText: enhanceResult.text,
+      }).isAnomaly
+    ) {
+      retryCount++;
+      enhanceResult = await enhanceText(voiceText, llmApiKey, enhanceOptions);
+      usage = mergeChatUsage(usage, enhanceResult.usage);
+    }
+
+    const anomaly = detectEnhancementAnomaly({
+      rawText: voiceText,
+      enhancedText: enhanceResult.text,
+    });
+    const drift = detectSemanticDrift(voiceText, enhanceResult.text);
+    if (anomaly.isAnomaly || drift.isDrift || enhanceResult.isRawFallback) {
+      writeErrorLog(
+        `useVoiceFlowStore: replace enhancement rejected (anomaly=${anomaly.reason ?? "none"}, drift=${drift.isDrift}, overlap=${drift.overlapRatio.toFixed(2)}, emptyResponse=${enhanceResult.isRawFallback === true}), using voice text as is`,
+      );
+      return { text: voiceText, wasEnhanced: false, usage };
+    }
+    return { text: enhanceResult.text, wasEnhanced: true, usage };
+  }
+
+  /** 合併兩次 LLM 呼叫的用量，供同一筆歷史紀錄的 api_usage 使用。 */
+  function mergeChatUsage(
+    a: ChatUsageData | null,
+    b: ChatUsageData | null,
+  ): ChatUsageData | null {
+    if (!a || !b) return a ?? b;
+    const sumOptional = (x?: number, y?: number) =>
+      x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0);
+    return {
+      promptTokens: a.promptTokens + b.promptTokens,
+      completionTokens: a.completionTokens + b.completionTokens,
+      totalTokens: a.totalTokens + b.totalTokens,
+      promptTimeMs: sumOptional(a.promptTimeMs, b.promptTimeMs),
+      completionTimeMs: sumOptional(a.completionTimeMs, b.completionTimeMs),
+      totalTimeMs: sumOptional(a.totalTimeMs, b.totalTimeMs),
+    };
   }
 
   async function handleRetryTranscription() {

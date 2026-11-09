@@ -538,7 +538,7 @@ describe("useVoiceFlowStore", () => {
       await vi.waitFor(
         () => {
           expect(mockEnhanceText).toHaveBeenCalledWith(
-            "後備選取的文字",
+            expect.stringContaining("<selected_text>\n後備選取的文字\n</selected_text>"),
             expect.anything(),
             expect.anything(),
           );
@@ -546,6 +546,191 @@ describe("useVoiceFlowStore", () => {
         { timeout: 3000 },
       );
       expect(mockInvoke).toHaveBeenCalledWith("read_selected_text");
+    });
+  });
+
+  // #36：選取文字語音改寫的意圖判斷（edit／replace）
+  describe("選取文字語音改寫意圖（#36）", () => {
+    function enterEditModeWith(selection: string) {
+      const base = createMockInvokeHandler();
+      mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+        if (cmd === "read_selection_state")
+          return { kind: "selection", text: selection };
+        return base(cmd, args);
+      });
+    }
+
+    async function recordAndWaitForPaste() {
+      const store = useVoiceFlowStore();
+      await store.initialize();
+      triggerHotkeyEvent("hotkey:pressed");
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("start_recording", {
+          deviceName: "",
+        });
+      });
+      triggerHotkeyEvent("hotkey:released");
+      return store;
+    }
+
+    it("[P0] 判為 edit：貼上模型處理結果、顯示已編輯、只呼叫一次 LLM", async () => {
+      enterEditModeWith("原本的文字");
+      mockEnhanceText.mockResolvedValueOnce({
+        text: "<intent>edit</intent>\nThe original text",
+        usage: null,
+      });
+
+      const store = await recordAndWaitForPaste();
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("paste_text", {
+          text: "The original text",
+          restoreClipboard: false,
+        });
+      });
+
+      expect(mockEnhanceText).toHaveBeenCalledTimes(1);
+      expect(mockEnhanceText.mock.calls[0][0]).toBe(
+        "<selected_text>\n原本的文字\n</selected_text>\n\n<voice_input>\n測試轉錄\n</voice_input>",
+      );
+      expect(store.message).toBe("voiceFlow.editSuccess");
+      await vi.waitFor(() => {
+        expect(mockAddTranscription).toHaveBeenCalledWith(
+          expect.objectContaining({
+            isEditMode: true,
+            editSourceText: "原本的文字",
+            rawText: "測試轉錄",
+            processedText: "The original text",
+          }),
+        );
+      });
+    });
+
+    it("[P0] 判為 replace：改走文字整理流程，貼上整理後的口述內容並顯示已重新輸入", async () => {
+      mockSettingsState.isEnhancementThresholdEnabled = false;
+      enterEditModeWith("傷心的選取");
+      mockEnhanceText
+        .mockResolvedValueOnce({ text: "<intent>replace</intent>", usage: null })
+        .mockResolvedValueOnce({ text: "測試轉錄。", usage: null });
+
+      const store = await recordAndWaitForPaste();
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("paste_text", {
+          text: "測試轉錄。",
+          restoreClipboard: false,
+        });
+      });
+
+      expect(mockEnhanceText).toHaveBeenCalledTimes(2);
+      // 第二次呼叫＝一般文字整理：口述內容原文、使用者的 AI 提示詞，且帶 transcriptLocale
+      expect(mockEnhanceText.mock.calls[1][0]).toBe("測試轉錄");
+      expect(mockEnhanceText.mock.calls[1][2]).toEqual(
+        expect.objectContaining({
+          systemPrompt: "自訂 prompt 內容",
+          transcriptLocale: expect.any(String),
+        }),
+      );
+      expect(store.message).toBe("voiceFlow.replaceSuccess");
+      await vi.waitFor(() => {
+        expect(mockAddTranscription).toHaveBeenCalledWith(
+          expect.objectContaining({
+            isEditMode: true,
+            editSourceText: "傷心的選取",
+            rawText: "測試轉錄",
+            processedText: "測試轉錄。",
+          }),
+        );
+      });
+    });
+
+    it("[P0] 兜底：標籤缺漏且輸出等於選取文字（只差標點空白）→ 視為 replace", async () => {
+      mockSettingsState.isEnhancementThresholdEnabled = false;
+      enterEditModeWith("傷心的選取");
+      mockEnhanceText
+        .mockResolvedValueOnce({ text: "傷心的選取。", usage: null })
+        .mockResolvedValueOnce({ text: "測試轉錄。", usage: null });
+
+      const store = await recordAndWaitForPaste();
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("paste_text", {
+          text: "測試轉錄。",
+          restoreClipboard: false,
+        });
+      });
+      expect(mockEnhanceText).toHaveBeenCalledTimes(2);
+      expect(store.message).toBe("voiceFlow.replaceSuccess");
+    });
+
+    it("[P1] 標籤缺漏但輸出與選取文字不同 → 當作 edit，整段回應即結果", async () => {
+      enterEditModeWith("原本的文字");
+      mockEnhanceText.mockResolvedValueOnce({
+        text: "改寫後的文字",
+        usage: null,
+      });
+
+      await recordAndWaitForPaste();
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("paste_text", {
+          text: "改寫後的文字",
+          restoreClipboard: false,
+        });
+      });
+      expect(mockEnhanceText).toHaveBeenCalledTimes(1);
+    });
+
+    it("[P1] 判為 replace 但低於整理門檻 → 直接用口述原文取代，不再呼叫 LLM", async () => {
+      mockSettingsState.isEnhancementThresholdEnabled = true;
+      mockSettingsState.enhancementThresholdCharCount = 10;
+      enterEditModeWith("傷心的選取");
+      mockEnhanceText.mockResolvedValueOnce({
+        text: "<intent>replace</intent>",
+        usage: null,
+      });
+
+      const store = await recordAndWaitForPaste();
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("paste_text", {
+          text: "測試轉錄",
+          restoreClipboard: false,
+        });
+      });
+      expect(mockEnhanceText).toHaveBeenCalledTimes(1);
+      expect(store.message).toBe("voiceFlow.replaceSuccess");
+    });
+
+    it("[P1] replace 的文字整理被語意飄移守衛攔下 → 貼上口述原文", async () => {
+      mockSettingsState.isEnhancementThresholdEnabled = false;
+      enterEditModeWith("傷心的選取");
+      mockEnhanceText
+        .mockResolvedValueOnce({ text: "<intent>replace</intent>", usage: null })
+        .mockResolvedValueOnce({
+          text: "好的，以下是為您準備的完全無關內容",
+          usage: null,
+        });
+
+      await recordAndWaitForPaste();
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("paste_text", {
+          text: "測試轉錄",
+          restoreClipboard: false,
+        });
+      });
+    });
+
+    it("[P0] replace 的文字整理 LLM 失敗 → 不貼上、保留選取文字", async () => {
+      mockSettingsState.isEnhancementThresholdEnabled = false;
+      enterEditModeWith("傷心的選取");
+      mockEnhanceText
+        .mockResolvedValueOnce({ text: "<intent>replace</intent>", usage: null })
+        .mockRejectedValueOnce(new Error("整理逾時"));
+
+      const store = await recordAndWaitForPaste();
+      await vi.waitFor(() => {
+        expect(store.status).toBe("error");
+      });
+      expect(mockInvoke).not.toHaveBeenCalledWith(
+        "paste_text",
+        expect.anything(),
+      );
     });
   });
 
@@ -608,7 +793,7 @@ describe("useVoiceFlowStore", () => {
       recordOnce();
       await vi.advanceTimersByTimeAsync(FLOW_SETTLE_MS);
       expect(mockEnhanceText).toHaveBeenCalledWith(
-        "選取的文字",
+        expect.stringContaining("<selected_text>\n選取的文字\n</selected_text>"),
         expect.anything(),
         expect.anything(),
       );
@@ -643,7 +828,7 @@ describe("useVoiceFlowStore", () => {
       recordOnce();
       await vi.advanceTimersByTimeAsync(FLOW_SETTLE_MS);
       expect(mockEnhanceText).toHaveBeenCalledWith(
-        "稍慢的選取",
+        expect.stringContaining("<selected_text>\n稍慢的選取\n</selected_text>"),
         expect.anything(),
         expect.anything(),
       );
@@ -673,7 +858,7 @@ describe("useVoiceFlowStore", () => {
       });
       expect(store.isEditMode).toBe(false);
       expect(mockEnhanceText).not.toHaveBeenCalledWith(
-        "超時的選取",
+        expect.stringContaining("<selected_text>\n超時的選取\n</selected_text>"),
         expect.anything(),
         expect.anything(),
       );
@@ -760,7 +945,7 @@ describe("useVoiceFlowStore", () => {
       await vi.advanceTimersByTimeAsync(50);
       expect(store.isEditMode).toBe(false);
       expect(mockEnhanceText).not.toHaveBeenCalledWith(
-        "晚到的選取",
+        expect.stringContaining("<selected_text>\n晚到的選取\n</selected_text>"),
         expect.anything(),
         expect.anything(),
       );
