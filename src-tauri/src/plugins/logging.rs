@@ -39,7 +39,10 @@ fn push_hotkey_diagnostic(level: log::Level, message: &str) {
     }
     // 不引新依賴：時間戳是「自第一筆白名單日誌起算的毫秒」（不是 app 啟動），看事件間隔與順序夠用
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    let elapsed_ms = START.get_or_init(std::time::Instant::now).elapsed().as_millis();
+    let elapsed_ms = START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_millis();
     let line = format!("+{elapsed_ms}ms {level} {message}");
     if let Ok(mut buf) = HOTKEY_DIAG_BUFFER.lock() {
         if buf.len() >= HOTKEY_DIAG_CAPACITY {
@@ -193,10 +196,8 @@ mod tests {
     use std::time::Duration;
 
     fn temp_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "sayit-logging-test-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("sayit-logging-test-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -370,8 +371,16 @@ mod tests {
         let logger = GatedLogger::new(Box::new(NullLog));
 
         feed(&logger, "sayit", "[transcription] Response: \"這是逐字稿\"");
-        feed(&logger, "webview", "[SettingsView] hotkey recording: listeners ready");
-        feed(&logger, "sayit", "[hotkey-listener] recording: vk=0x4B down=true");
+        feed(
+            &logger,
+            "webview",
+            "[SettingsView] hotkey recording: listeners ready",
+        );
+        feed(
+            &logger,
+            "sayit",
+            "[hotkey-listener] recording: vk=0x4B down=true",
+        );
         feed(&logger, "webview", "[VoiceFlow] enhancement done");
 
         let snap = get_hotkey_recording_diagnostics();
@@ -394,5 +403,4 @@ mod tests {
         assert!(!snap.iter().any(|l| l.contains("listeners ready")));
         HOTKEY_DIAG_BUFFER.lock().unwrap().clear();
     }
-
 }

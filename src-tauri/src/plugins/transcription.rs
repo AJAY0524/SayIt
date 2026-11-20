@@ -465,9 +465,8 @@ pub async fn retranscribe_from_file(
 
     // 注意：std::fs::read 是同步 I/O，但 WAV 檔案通常很小（< 1MB），
     // 在 Tauri command 的 async context 中可接受。
-    let wav_data = std::fs::read(&file_path).map_err(|e| {
-        TranscriptionError::RequestFailed(format!("Failed to read WAV file: {e}"))
-    })?;
+    let wav_data = std::fs::read(&file_path)
+        .map_err(|e| TranscriptionError::RequestFailed(format!("Failed to read WAV file: {e}")))?;
 
     log::info!(
         "[transcription] Retranscribing from file: {} ({} bytes)",

@@ -4,7 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import MainApp from "./MainApp.vue";
 import router from "./router";
-import { initializeDatabase, setDatabaseInitError } from "./lib/database";
+import {
+  getDatabaseInitError,
+  initializeDatabase,
+  setDatabaseInitError,
+} from "./lib/database";
 import {
   emitEvent,
   listenToEvent,
@@ -105,6 +109,12 @@ async function bootstrap() {
         }
       })();
     });
+  }
+
+  // 系統匣「最近紀錄」子選單：啟動時載入一次，之後由 useHistoryStore 寫入後同步（fork 自訂）
+  if (!getDatabaseInitError()) {
+    const { useHistoryStore } = await import("./stores/useHistoryStore");
+    void useHistoryStore().syncRecentTrayMenu();
   }
 
   // 更新檢查由 MainApp.vue onMounted 的 autoCheckAndDownload() 處理

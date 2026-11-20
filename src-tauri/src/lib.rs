@@ -9,12 +9,7 @@ extern crate objc;
 mod plugins;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{
-    command,
-    menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, Manager, Runtime,
-};
+use tauri::{command, tray::TrayIconBuilder, AppHandle, Manager, Runtime};
 
 /// App 重啟旗標：由 `request_app_restart` command 設定，
 /// `RunEvent::Exit` handler 在 `_exit(0)` 前檢查並 spawn 新 process。
@@ -483,6 +478,7 @@ pub fn run() {
             plugins::clipboard_paste::capture_target_window,
             plugins::clipboard_paste::copy_to_clipboard,
             plugins::clipboard_paste::paste_text,
+            plugins::recent_tray::set_recent_transcriptions,
             plugins::hotkey_listener::check_accessibility_permission_command,
             plugins::hotkey_listener::open_accessibility_settings,
             plugins::hotkey_listener::reinitialize_hotkey_listener,
@@ -578,6 +574,8 @@ pub fn run() {
             app.manage(plugins::audio_control::AudioControlState::new());
             // 初始化 clipboard focus 狀態（Windows 貼上前恢復焦點）
             app.manage(plugins::clipboard_paste::FocusState::new());
+            // 系統匣「最近紀錄」清單（fork 自訂，前端推送）
+            app.manage(plugins::recent_tray::RecentTrayState::default());
             // 初始化 audio recorder 狀態
             app.manage(plugins::audio_recorder::AudioRecorderState::new());
             // 初始化 audio preview 狀態（音量預覽）
@@ -610,12 +608,9 @@ pub fn run() {
                 });
             }
 
-            let open_dashboard_item =
-                MenuItem::with_id(app, "open-dashboard", "開啟 Dashboard", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit SayIt", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open_dashboard_item, &quit_item])?;
+            let menu = plugins::recent_tray::build_tray_menu(app.handle(), &[])?;
 
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id(plugins::recent_tray::TRAY_ID)
                 .icon(tauri::image::Image::from_bytes(include_bytes!(
                     "../icons/tray-icon.png"
                 ))?)
@@ -630,7 +625,11 @@ pub fn run() {
                     "quit" => {
                         app.exit(0);
                     }
-                    _ => {}
+                    id => {
+                        if let Some(index) = plugins::recent_tray::parse_recent_index(id) {
+                            plugins::recent_tray::handle_recent_click(app, index);
+                        }
+                    }
                 })
                 .build(app)?;
 

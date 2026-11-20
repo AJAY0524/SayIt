@@ -24,6 +24,7 @@ paths:
 | `paste_text` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | `text: String, restore_clipboard: bool` | `Result<PasteOutcome, ClipboardError>`（`"pasted"`／`"targetChanged"`：macOS 輸入目標已換時不貼、文字留在剪貼簿；fork 自訂） |
 | `copy_to_clipboard` | `plugins/clipboard_paste.rs` | HistoryView | `text: String` | `Result<(), ClipboardError>` |
 | `capture_target_window` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | — | `()`（Windows 記前景視窗；macOS 記前景 App 與焦點元件，見 `focus_target.rs`） |
+| `set_recent_transcriptions` | `plugins/recent_tray.rs` | useHistoryStore | `items: Vec<RecentTrayItem { label, text }>`（最多 5 筆） | `Result<(), String>`（重建系統匣「最近紀錄」子選單，點選即複製；fork 自訂） |
 | `check_accessibility_permission_command` | `plugins/hotkey_listener.rs` | AccessibilityGuide.vue | — | `bool` |
 | `open_accessibility_settings` | `plugins/hotkey_listener.rs` | AccessibilityGuide.vue | — | `Result<(), String>` |
 | `reinitialize_hotkey_listener` | `plugins/hotkey_listener.rs` | AccessibilityGuide.vue | `app: AppHandle` | `Result<(), String>` |
