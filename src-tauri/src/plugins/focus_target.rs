@@ -110,7 +110,8 @@ mod macos_impl {
     /// 前景 App 的 pid。用 NSWorkspace 而非 AX 系統層級的 AXFocusedApplication：
     /// 後者實測會回 kAXErrorCannotComplete（-25204），前者穩定。
     fn frontmost_pid() -> Option<i32> {
-        unsafe {
+        // 可能在 Tokio 背景執行緒呼叫（paste_to_saved_target），那裡沒有 autorelease pool
+        objc::rc::autoreleasepool(|| unsafe {
             let workspace: *mut objc::runtime::Object =
                 msg_send![class!(NSWorkspace), sharedWorkspace];
             if workspace.is_null() {
@@ -122,7 +123,7 @@ mod macos_impl {
             }
             let pid: i32 = msg_send![app, processIdentifier];
             (pid > 0).then_some(pid)
-        }
+        })
     }
 
     /// 讀目前的前景 App pid 與焦點元件；讀不到前景 App 回 None。
@@ -146,20 +147,24 @@ mod macos_impl {
     /// 切回錄音開始時的 App 與輸入框，等到比對結果為 Same 才回 true。
     /// 同時用 NSRunningApplication 與 AX 的 AXFrontmost：前者在 SayIt 非作用中時可能被系統忽略。
     pub fn refocus(target: &FocusTarget) -> bool {
-        unsafe {
+        let activated = objc::rc::autoreleasepool(|| unsafe {
             let app: *mut objc::runtime::Object = msg_send![
                 class!(NSRunningApplication),
                 runningApplicationWithProcessIdentifier: target.pid
             ];
             if app.is_null() {
-                log::info!(
-                    "[focus-target] refocus: app pid={} no longer running",
-                    target.pid
-                );
                 return false;
             }
             // NSApplicationActivateIgnoringOtherApps = 1 << 1
             let _: bool = msg_send![app, activateWithOptions: 2u64];
+            true
+        });
+        if !activated {
+            log::info!(
+                "[focus-target] refocus: app pid={} no longer running",
+                target.pid
+            );
+            return false;
         }
         let app_element = OwnedCf(unsafe { AXUIElementCreateApplication(target.pid) });
         if !app_element.0.is_null() {
@@ -168,6 +173,8 @@ mod macos_impl {
             log::info!("[focus-target] refocus: set AXFrontmost → {err}");
         }
         if let Some(element) = &target.element {
+            // 逾時綁在各別元件上，不會從 App 元件繼承
+            unsafe { AXUIElementSetMessagingTimeout(element.0, AX_MESSAGING_TIMEOUT_SECS) };
             let err = set_bool_attribute(element.0, "AXFocused");
             log::info!("[focus-target] refocus: set AXFocused → {err}");
         }

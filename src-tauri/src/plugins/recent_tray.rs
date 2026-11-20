@@ -98,12 +98,12 @@ pub fn set_recent_transcriptions<R: Runtime>(
 ) -> Result<(), String> {
     let items: Vec<RecentTrayItem> = items.into_iter().take(MAX_RECENT_ITEMS).collect();
     let menu = build_tray_menu(&app, &items).map_err(|e| e.to_string())?;
-    if let Ok(mut guard) = state.items.lock() {
-        *guard = items;
-    }
+    // 暫存清單與選單在同一把鎖內一起換，連續推送時兩者不會交錯對不上
+    let mut guard = state.items.lock().map_err(|e| e.to_string())?;
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
     }
+    *guard = items;
     Ok(())
 }
 

@@ -195,6 +195,10 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
 
   let lastMonitorKey = "";
   let isRepositioning = false;
+  /** transitionTo 每次呼叫遞增，用來判斷 showHud().then() 是否已被較新的轉場取代 */
+  let hudTransitionSeq = 0;
+  /** 「貼回原位置」執行中，防止連點 */
+  let isPastingBack = false;
 
   function getAppWindow() {
     if (!cachedAppWindow) cachedAppWindow = getCurrentWindow();
@@ -397,11 +401,25 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     };
   }
 
+  /**
+   * showHud() 會先把 HUD 設成忽略滑鼠，需要可點按鈕的狀態再於 then() 打開。
+   * 只在這次轉場仍是最新、而且條件仍成立時才打開：快速連續轉場時，較舊轉場的
+   * then() 可能晚於較新轉場的 showHud() 落地，把應忽略滑鼠的 HUD 又設成攔截點擊。
+   */
+  async function enableHudCursorIfCurrent(
+    transitionSeq: number,
+    isStillWanted: () => boolean,
+  ) {
+    if (transitionSeq !== hudTransitionSeq || !isStillWanted()) return;
+    await getAppWindow().setIgnoreCursorEvents(false);
+  }
+
   function transitionTo(
     nextStatus: HudStatus,
     nextMessage = "",
     successDisplayMs = SUCCESS_DISPLAY_DURATION_MS,
   ) {
+    const transitionSeq = ++hudTransitionSeq;
     clearAutoHideTimer();
     clearCollapseHideTimer();
     status.value = nextStatus;
@@ -426,7 +444,12 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
       pendingPasteBackText.value = null;
       // HUD 的 ✕ 取消按鈕要能點：showHud() 會先關掉滑鼠事件，這裡再打開
       showHud()
-        .then(() => getAppWindow().setIgnoreCursorEvents(false))
+        .then(() =>
+          enableHudCursorIfCurrent(
+            transitionSeq,
+            () => status.value === "recording",
+          ),
+        )
         .catch((err) => {
           writeErrorLog(
             `useVoiceFlowStore: showHud/enableCursor failed: ${extractErrorMessage(err)}`,
@@ -448,12 +471,13 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
 
     if (nextStatus === "success") {
       showHud()
-        .then(async () => {
+        .then(() =>
           // 「貼回原位置」按鈕要能點：HUD 平常忽略滑鼠，這裡開啟（同 error 重試按鈕）
-          if (pendingPasteBackText.value !== null) {
-            await getAppWindow().setIgnoreCursorEvents(false);
-          }
-        })
+          enableHudCursorIfCurrent(
+            transitionSeq,
+            () => pendingPasteBackText.value !== null,
+          ),
+        )
         .catch((err) => {
           writeErrorLog(
             `useVoiceFlowStore: showHud failed: ${extractErrorMessage(err)}`,
@@ -481,9 +505,12 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
 
     if (nextStatus === "error") {
       showHud()
-        .then(async () => {
-          await getAppWindow().setIgnoreCursorEvents(false);
-        })
+        .then(() =>
+          enableHudCursorIfCurrent(
+            transitionSeq,
+            () => status.value === "error",
+          ),
+        )
         .catch((err) => {
           writeErrorLog(
             `useVoiceFlowStore: showHud/enableCursor failed: ${extractErrorMessage(err)}`,
@@ -848,8 +875,10 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
   /** HUD「貼回原位置」：切回錄音開始時的 App 與輸入框再貼上（fork 自訂） */
   async function handlePasteBack() {
     const text = pendingPasteBackText.value;
-    if (text === null) return;
-    pendingPasteBackText.value = null;
+    if (text === null || isPastingBack) return;
+    isPastingBack = true;
+    // 切回原 App 最多約 1 秒：先停掉 8 秒自動收合，按鈕列保留到有結果再換畫面
+    clearAutoHideTimer();
     try {
       const settingsStore = useSettingsStore();
       const outcome = await invoke<"pasted" | "targetUnavailable">(
@@ -859,16 +888,20 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
           restoreClipboard: !settingsStore.isCopyTranscriptionToClipboardEnabled,
         },
       );
+      pendingPasteBackText.value = null;
       if (outcome === "pasted") {
         transitionTo("success", t("voiceFlow.pasteSuccess"));
       } else {
         transitionTo("error", t("voiceFlow.pasteBackFailed"));
       }
     } catch (err) {
+      pendingPasteBackText.value = null;
       writeErrorLog(
         `useVoiceFlowStore: paste_to_saved_target failed: ${extractErrorMessage(err)}`,
       );
       transitionTo("error", t("voiceFlow.pasteBackFailed"));
+    } finally {
+      isPastingBack = false;
     }
   }
 

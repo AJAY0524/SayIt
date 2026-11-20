@@ -210,6 +210,15 @@ const SELECT_RECENT_SQL = `
   LIMIT $1
 `;
 
+/** 系統匣「最近紀錄」只列成功的紀錄，失敗或過短錄音不擠掉名額（fork 自訂） */
+const SELECT_RECENT_SUCCESS_SQL = `
+  SELECT ${TRANSCRIPTION_SELECT_COLUMNS}
+  FROM transcriptions
+  WHERE status = 'success'
+  ORDER BY timestamp DESC
+  LIMIT $1
+`;
+
 const ASSUMED_TYPING_SPEED_CHARS_PER_MIN = 40;
 
 /** 有效轉譯語言：auto 回退到介面語言。重新辨識（原文轉換）與重新整理（#83）共用。 */
@@ -343,12 +352,17 @@ export const useHistoryStore = defineStore("history", () => {
   }
 
   /**
-   * 把最近幾筆紀錄推給系統匣「最近紀錄」子選單（fork 自訂）。失敗只記錄，不影響主流程。
-   * 多抓一倍是為了略過失敗與空白紀錄後仍湊得滿。
+   * 把最近幾筆成功紀錄推給系統匣「最近紀錄」子選單（fork 自訂）。失敗只記錄，不影響主流程。
+   * 多抓一倍是為了略過空白紀錄後仍湊得滿。
    */
   async function syncRecentTrayMenu(): Promise<void> {
     try {
-      const recordList = await fetchRecentTranscriptionList(RECENT_TRAY_LIMIT * 2);
+      const db = getDatabase();
+      const rows = await db.select<RawTranscriptionRow[]>(
+        SELECT_RECENT_SUCCESS_SQL,
+        [RECENT_TRAY_LIMIT * 2],
+      );
+      const recordList = rows.map(mapRowToRecord);
       await invoke("set_recent_transcriptions", {
         items: buildRecentTrayItems(recordList),
       });
