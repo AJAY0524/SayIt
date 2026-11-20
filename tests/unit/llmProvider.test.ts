@@ -79,7 +79,7 @@ describe("llmProvider.ts", () => {
     it("[P0] Groq qwen：reasoning_effort none 關閉思考模式", () => {
       const qwenRequest: LlmChatRequest = {
         ...BASE_REQUEST,
-        model: "qwen/qwen3.6-27b",
+        model: "qwen/qwen3.8-27b",
       };
       const { init } = buildFetchParams("groq", qwenRequest, TEST_API_KEY);
       const body = JSON.parse(init.body as string);
@@ -118,37 +118,34 @@ describe("llmProvider.ts", () => {
       const headers = init.headers as Record<string, string>;
       expect(headers["x-api-key"]).toBe(TEST_API_KEY);
       expect(headers["anthropic-version"]).toBe("2023-06-01");
+      // plugin-http 會帶 Origin，缺這個標頭 Anthropic 回 401（看起來像金鑰無效）
       expect(headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
       expect(headers.Authorization).toBeUndefined();
     });
 
-    it("[P0] Anthropic 5.5 世代：不送 temperature，Haiku 關閉思考且不送 effort、Sonnet 用 between_tools 搭配 effort low", () => {
-      const withTemperature: LlmChatRequest = { ...BASE_REQUEST, temperature: 0.1 };
+    it("[P0] Anthropic：system message 提取到頂層", () => {
+      const { init } = buildFetchParams("anthropic", BASE_REQUEST, TEST_API_KEY);
+      const body = JSON.parse(init.body as string);
 
-      const haiku = JSON.parse(
-        buildFetchParams(
-          "anthropic",
-          { ...withTemperature, model: "claude-haiku-5-5" },
-          TEST_API_KEY,
-        ).init.body as string,
-      );
-      expect(haiku.temperature).toBeUndefined();
-      expect(haiku.thinking).toEqual({ type: "disabled" });
-      expect(haiku.output_config).toBeUndefined();
-
-      const sonnet = JSON.parse(
-        buildFetchParams(
-          "anthropic",
-          { ...withTemperature, model: "claude-sonnet-5-5" },
-          TEST_API_KEY,
-        ).init.body as string,
-      );
-      expect(sonnet.temperature).toBeUndefined();
-      expect(sonnet.thinking).toEqual({ type: "between_tools" });
-      expect(sonnet.output_config).toEqual({ effort: "low" });
+      expect(body.system).toBe("You are a helper");
+      expect(body.messages).toHaveLength(1);
+      expect(body.messages[0].role).toBe("user");
     });
 
-    it("[P0] Haiku 5.5 帶 effort 時送 output_config.effort（thinking 仍關閉）；Sonnet 5.5 與舊模型不受影響", () => {
+    it("[P0] Anthropic Haiku 5.x：不送 temperature、關閉 thinking", () => {
+      // 實測：Haiku 5.5 帶 temperature 回 400；不關 thinking 會把推理文字混進輸出
+      const { init } = buildFetchParams(
+        "anthropic",
+        { ...BASE_REQUEST, model: "claude-haiku-5-5" },
+        TEST_API_KEY,
+      );
+      const body = JSON.parse(init.body as string);
+
+      expect(body.temperature).toBeUndefined();
+      expect(body.thinking).toEqual({ type: "disabled" });
+    });
+
+    it("[P0] Anthropic Haiku 5.x 帶 effort：送 output_config.effort，thinking 仍關閉", () => {
       const build = (model: string) =>
         JSON.parse(
           buildFetchParams(
@@ -160,34 +157,28 @@ describe("llmProvider.ts", () => {
       const haiku = build("claude-haiku-5-5");
       expect(haiku.thinking).toEqual({ type: "disabled" });
       expect(haiku.output_config).toEqual({ effort: "high" });
-      expect(build("claude-sonnet-5-5").output_config).toEqual({ effort: "low" });
       expect(build("claude-haiku-4-5-20251001").output_config).toBeUndefined();
     });
 
-    it("[P0] Anthropic 舊模型（Haiku 4.5）：仍送 temperature，不帶 thinking / output_config", () => {
-      const body = JSON.parse(
-        buildFetchParams(
-          "anthropic",
-          {
-            ...BASE_REQUEST,
-            model: "claude-haiku-4-5-20251001",
-            temperature: 0.1,
-          },
-          TEST_API_KEY,
-        ).init.body as string,
+    it("[P0] Anthropic Haiku 5.x 不帶 effort：不送 output_config", () => {
+      const { init } = buildFetchParams(
+        "anthropic",
+        { ...BASE_REQUEST, model: "claude-haiku-5-5" },
+        TEST_API_KEY,
       );
-      expect(body.temperature).toBe(0.1);
-      expect(body.thinking).toBeUndefined();
-      expect(body.output_config).toBeUndefined();
+      expect(JSON.parse(init.body as string).output_config).toBeUndefined();
     });
 
-    it("[P0] Anthropic：system message 提取到頂層", () => {
-      const { init } = buildFetchParams("anthropic", BASE_REQUEST, TEST_API_KEY);
+    it("[P0] Anthropic Haiku 4.5：照舊送 temperature、不帶 thinking", () => {
+      const { init } = buildFetchParams(
+        "anthropic",
+        { ...BASE_REQUEST, model: "claude-haiku-4-5-20251001" },
+        TEST_API_KEY,
+      );
       const body = JSON.parse(init.body as string);
 
-      expect(body.system).toBe("You are a helper");
-      expect(body.messages).toHaveLength(1);
-      expect(body.messages[0].role).toBe("user");
+      expect(body.temperature).toBe(0.1);
+      expect(body.thinking).toBeUndefined();
     });
 
     it("[P0] Anthropic：max_tokens 必填，未提供時預設 8192", () => {
@@ -408,10 +399,10 @@ describe("llmProvider.ts", () => {
     });
 
     it("[P0] getProviderIdForModel 根據 modelId 回傳 providerId", () => {
-      expect(getProviderIdForModel("qwen/qwen3.6-27b")).toBe("groq");
+      expect(getProviderIdForModel("qwen/qwen3.8-27b")).toBe("groq");
       expect(getProviderIdForModel("gpt-5.6-luna")).toBe("openai");
       expect(getProviderIdForModel("claude-haiku-4-5-20251001")).toBe("anthropic");
-      expect(getProviderIdForModel("gemini-3.5-flash")).toBe("gemini");
+      expect(getProviderIdForModel("gemini-3.5-flash-lite")).toBe("gemini");
     });
 
     it("[P1] getProviderIdForModel 未知模型 fallback 到 groq", () => {

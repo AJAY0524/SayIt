@@ -82,7 +82,7 @@ export interface LlmChatMessage {
   content: string;
 }
 
-/** Anthropic `output_config.effort` 等級；Haiku 5.5 在 thinking 關閉時只接受 low／medium／high */
+/** Anthropic `output_config.effort` 等級；Haiku 5.x 在 thinking 關閉時只接受 low／medium／high */
 export type LlmEffort = "low" | "medium" | "high";
 
 export interface LlmChatRequest {
@@ -90,7 +90,7 @@ export interface LlmChatRequest {
   messages: LlmChatMessage[];
   temperature?: number;
   maxTokens?: number;
-  /** 只對 Claude Haiku 5.5 生效；不傳等同官方預設 medium */
+  /** 只對 Claude Haiku 5.x 生效；不傳等同官方預設 medium（文字整理用法見 enhancer.ts 的 TEXT_CLEANUP_EFFORT） */
   effort?: LlmEffort;
 }
 
@@ -184,10 +184,6 @@ function buildOpenAiCompatibleFetchParams(
   };
 }
 
-function isClaude55Model(model: string): boolean {
-  return model === "claude-haiku-5-5" || model === "claude-sonnet-5-5";
-}
-
 function buildAnthropicFetchParams(
   url: string,
   request: LlmChatRequest,
@@ -213,19 +209,12 @@ function buildAnthropicFetchParams(
     max_tokens: request.maxTokens ?? getDefaultMaxTokens("anthropic"),
   };
   if (systemPrompt) body.system = systemPrompt;
-  if (isClaude55Model(request.model)) {
-    // 5.5 世代：非預設的 temperature 會回 400（"`temperature` is deprecated"），一律不送；
-    // 預設啟用思考會拖慢速度與費用，文字整理不需要，改為關閉思考。
-    // Haiku 5.5：thinking 關閉時 effort 仍作用於所有輸出 token（官方：works with or without thinking），
-    // 省略等同 medium；由呼叫端依用途決定是否送（文字整理見 #31 第 7 條）。xhigh／max 在 thinking 關閉時會回 400。
-    // Sonnet 5.5：disabled 會回 400，改用 between_tools 搭配 effort low 略過前置思考
-    if (request.model === "claude-sonnet-5-5") {
-      body.thinking = { type: "between_tools" };
-      body.output_config = { effort: "low" };
-    } else {
-      body.thinking = { type: "disabled" };
-      if (request.effort) body.output_config = { effort: request.effort };
-    }
+  if (request.model.startsWith("claude-haiku-5")) {
+    // Haiku 5.x：送 temperature 回 400（2026-11-13 真 key 實測）；預設開啟的
+    // adaptive thinking 會把推理文字混進 text 區塊，必須關閉
+    body.thinking = { type: "disabled" };
+    // thinking 關閉時 effort 仍作用於輸出；xhigh／max 在 thinking 關閉時會回 400
+    if (request.effort) body.output_config = { effort: request.effort };
   } else if (request.temperature !== undefined) {
     body.temperature = request.temperature;
   }
@@ -237,7 +226,8 @@ function buildAnthropicFetchParams(
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
-        // App 視窗送出的請求帶有 Origin，Anthropic 要求此標頭，否則回 401
+        // tauri-plugin-http 一律附上 Origin 標頭，Anthropic 視為瀏覽器 CORS 請求，
+        // 沒有這個標頭就回 401 authentication_error（2026-11-13 真 key 實測）
         "anthropic-dangerous-direct-browser-access": "true",
         "Content-Type": "application/json",
       },
