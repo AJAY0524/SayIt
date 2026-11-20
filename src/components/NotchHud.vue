@@ -41,6 +41,7 @@ const props = defineProps<{
 defineEmits<{
   retry: [];
   pasteBack: [];
+  cancel: [];
 }>();
 
 const visualMode = ref<VisualMode>("hidden");
@@ -460,6 +461,24 @@ onUnmounted(() => {
             <span v-else-if="props.promptModeLabel" class="hud-badge prompt-mode-badge">{{ props.promptModeLabel }}</span>
             <span class="elapsed-timer">
               {{ formattedElapsedTime }}
+            </span>
+            <!-- 取消錄音：取代 ESC（ESC 會同時送到前景 App）；fork 自訂 -->
+            <span
+              class="cancel-recording"
+              role="button"
+              :aria-label="t('voiceFlow.cancelRecording')"
+              :title="t('voiceFlow.cancelRecording')"
+              @click.stop="$emit('cancel')"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M6 6l12 12M18 6L6 18"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                />
+              </svg>
             </span>
           </template>
           <span
@@ -898,7 +917,7 @@ html.dark .notch-hud .prompt-mode-badge { background: rgba(255, 255, 255, 0.2); 
 }
 
 .paste-back-message {
-  color: #fbbf24;
+  color: var(--notch-edit-fg);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -908,8 +927,8 @@ html.dark .notch-hud .prompt-mode-badge { background: rgba(255, 255, 255, 0.2); 
 
 .paste-back-action {
   flex-shrink: 0;
-  color: #0a0a0a;
-  background: #fbbf24;
+  color: var(--notch-edit-fg);
+  background: var(--notch-edit-bg);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
@@ -919,7 +938,25 @@ html.dark .notch-hud .prompt-mode-badge { background: rgba(255, 255, 255, 0.2); 
 }
 
 .paste-back-action:hover {
-  background: #fcd34d;
+  filter: brightness(1.15);
+}
+
+.cancel-recording {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 8px;
+  border-radius: 50%;
+  color: var(--notch-fg-soft);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.cancel-recording:hover {
+  color: var(--notch-fg);
+  background: color-mix(in srgb, var(--notch-fg) 12%, transparent);
 }
 
 .retry-icon {

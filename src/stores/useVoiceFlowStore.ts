@@ -424,13 +424,19 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
 
     if (nextStatus === "recording") {
       pendingPasteBackText.value = null;
+      // HUD 的 ✕ 取消按鈕要能點：showHud() 會先關掉滑鼠事件，這裡再打開
+      showHud()
+        .then(() => getAppWindow().setIgnoreCursorEvents(false))
+        .catch((err) => {
+          writeErrorLog(
+            `useVoiceFlowStore: showHud/enableCursor failed: ${extractErrorMessage(err)}`,
+          );
+          captureError(err, { source: "voice-flow", step: "showHud" });
+        });
+      return;
     }
 
-    if (
-      nextStatus === "recording" ||
-      nextStatus === "transcribing" ||
-      nextStatus === "enhancing"
-    ) {
+    if (nextStatus === "transcribing" || nextStatus === "enhancing") {
       showHud().catch((err) => {
         writeErrorLog(
           `useVoiceFlowStore: showHud failed: ${extractErrorMessage(err)}`,
@@ -2263,6 +2269,8 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     canRetry,
     canPasteBack,
     handlePasteBack,
+    /** HUD ✕ 按鈕取消錄音，與 ESC 走同一條中止流程（fork 自訂） */
+    cancelRecording: handleEscapeAbort,
     modeSwitchLabel,
     isEditMode,
     initialize,

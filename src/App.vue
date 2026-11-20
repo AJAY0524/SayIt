@@ -106,6 +106,10 @@ function handlePasteBack() {
   void voiceFlowStore.handlePasteBack();
 }
 
+function handleCancelRecording() {
+  voiceFlowStore.cancelRecording();
+}
+
 onUnmounted(() => {
   unlistenSettingsUpdated?.();
   unlistenVocabularyChanged?.();
@@ -126,6 +130,7 @@ onUnmounted(() => {
       :can-paste-back="voiceFlowStore.canPasteBack"
       @retry="handleRetry"
       @paste-back="handlePasteBack"
+      @cancel="handleCancelRecording"
     />
   </div>
 </template>

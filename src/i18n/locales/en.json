@@ -355,7 +355,8 @@
     "commandMode": "Command",
     "targetChanged": "Input target changed — not pasted",
     "pasteBack": "Paste back",
-    "pasteBackFailed": "Couldn't return to the original field. Copy it from Recent in the menu bar"
+    "pasteBackFailed": "Couldn't return to the original field. Copy it from Recent in the menu bar",
+    "cancelRecording": "Cancel recording"
   },
   "errors": {
     "databaseInitFailed": "Database initialization failed. History is temporarily unavailable. Please restart the app.",

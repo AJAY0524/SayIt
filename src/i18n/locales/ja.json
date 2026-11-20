@@ -355,7 +355,8 @@
     "commandMode": "コマンド",
     "targetChanged": "入力先が変わったため未貼り付け",
     "pasteBack": "元の場所に貼る",
-    "pasteBackFailed": "元の場所に戻れません。メニューバーの「最近」からコピーしてください"
+    "pasteBackFailed": "元の場所に戻れません。メニューバーの「最近」からコピーしてください",
+    "cancelRecording": "録音をキャンセル"
   },
   "errors": {
     "databaseInitFailed": "データベースの初期化に失敗しました。履歴が一時的に使用できません。アプリを再起動してください。",

@@ -508,6 +508,29 @@ describe("useVoiceFlowStore", () => {
     );
   });
 
+  it("[P0] HUD ✕ 取消錄音：停止錄音、進入已取消、不轉錄也不貼上", async () => {
+    const store = useVoiceFlowStore();
+    await store.initialize();
+
+    triggerHotkeyEvent("hotkey:pressed");
+    await vi.waitFor(() => {
+      expect(store.status).toBe("recording");
+    });
+
+    store.cancelRecording();
+
+    expect(store.status).toBe("cancelled");
+    expect(mockInvoke).toHaveBeenCalledWith("stop_recording");
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "transcribe_audio",
+      expect.anything(),
+    );
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "paste_text",
+      expect.anything(),
+    );
+  });
+
   it("[P0] 貼回原位置：呼叫 paste_to_saved_target，成功顯示已貼上、切不回顯示錯誤", async () => {
     let pasteBackOutcome = "pasted";
     const base = createMockInvokeHandler();
