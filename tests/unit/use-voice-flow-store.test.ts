@@ -477,7 +477,7 @@ describe("useVoiceFlowStore", () => {
     });
   });
 
-  it("[P0] 輸入目標已換（paste_text 回 targetChanged）：HUD 提示按 ⌘V，不啟動品質與修正監看", async () => {
+  it("[P0] 輸入目標已換（paste_text 回 targetChanged）：HUD 顯示貼回按鈕，不啟動品質與修正監看", async () => {
     const base = createMockInvokeHandler();
     mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
       if (cmd === "paste_text") return "targetChanged";
@@ -497,9 +497,54 @@ describe("useVoiceFlowStore", () => {
       expect(store.status).toBe("success");
     });
 
-    expect(store.message).toBe("voiceFlow.targetChangedCopied");
+    expect(store.message).toBe("voiceFlow.targetChanged");
+    expect(store.canPasteBack).toBe(true);
     expect(mockInvoke).not.toHaveBeenCalledWith("start_quality_monitor");
     expect(mockInvoke).not.toHaveBeenCalledWith("start_correction_monitor");
+    // 沒有另外把文字寫進剪貼簿
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "copy_to_clipboard",
+      expect.anything(),
+    );
+  });
+
+  it("[P0] 貼回原位置：呼叫 paste_to_saved_target，成功顯示已貼上、切不回顯示錯誤", async () => {
+    let pasteBackOutcome = "pasted";
+    const base = createMockInvokeHandler();
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "paste_text") return "targetChanged";
+      if (cmd === "paste_to_saved_target") return pasteBackOutcome;
+      return base(cmd, args);
+    });
+    const store = useVoiceFlowStore();
+    await store.initialize();
+
+    async function recordOnce() {
+      triggerHotkeyEvent("hotkey:pressed");
+      await vi.waitFor(() => {
+        expect(store.status).toBe("recording");
+      });
+      triggerHotkeyEvent("hotkey:released");
+      await vi.waitFor(() => {
+        expect(store.canPasteBack).toBe(true);
+      });
+    }
+
+    await recordOnce();
+    await store.handlePasteBack();
+    expect(mockInvoke).toHaveBeenCalledWith("paste_to_saved_target", {
+      text: "測試轉錄",
+      restoreClipboard: false,
+    });
+    expect(store.status).toBe("success");
+    expect(store.message).toBe("voiceFlow.pasteSuccess");
+    expect(store.canPasteBack).toBe(false);
+
+    pasteBackOutcome = "targetUnavailable";
+    await recordOnce();
+    await store.handlePasteBack();
+    expect(store.status).toBe("error");
+    expect(store.message).toBe("voiceFlow.pasteBackFailed");
   });
 
   describe("選取偵測三態（#24/#25 編輯模式判定）", () => {

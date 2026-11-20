@@ -353,7 +353,9 @@
     "cancelled": "已取消",
     "modeSwitched": "已切换至{mode}模式",
     "commandMode": "指令",
-    "targetChangedCopied": "输入位置已改变，文字已复制，请按 ⌘V 粘贴"
+    "targetChanged": "输入位置已改变，尚未粘贴",
+    "pasteBack": "贴回原位置",
+    "pasteBackFailed": "无法切回原位置，可从菜单栏「最近记录」复制"
   },
   "errors": {
     "databaseInitFailed": "数据库初始化失败，历史记录暂时无法使用。请重新启动应用程序。",

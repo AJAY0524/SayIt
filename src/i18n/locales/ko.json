@@ -353,7 +353,9 @@
     "cancelled": "취소됨",
     "modeSwitched": "{mode} 모드로 전환되었습니다",
     "commandMode": "명령",
-    "targetChangedCopied": "입력 위치가 바뀌었습니다. 복사됨, ⌘V로 붙여넣기"
+    "targetChanged": "입력 위치가 바뀌어 붙여넣지 않음",
+    "pasteBack": "원래 위치에 붙여넣기",
+    "pasteBackFailed": "원래 위치로 돌아갈 수 없습니다. 메뉴 막대의 최근 기록에서 복사하세요"
   },
   "errors": {
     "databaseInitFailed": "데이터베이스 초기화에 실패했습니다. 기록을 일시적으로 사용할 수 없습니다. 앱을 다시 시작해 주세요.",

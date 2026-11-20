@@ -21,7 +21,8 @@ paths:
 | `get_hud_target_position` | `lib.rs` | — | `app: AppHandle` | `Result<HudTargetPosition, String>` |
 | `get_os_theme` | `lib.rs` | lib/theme.ts | — | `Option<String>`（`"dark"` \| `"light"`，非 Windows 回 `null`） |
 | `set_dock_icon_hidden` | `lib.rs` | useSettingsStore | `hidden: bool` | `Result<(), String>`（macOS 切換啟用策略 Accessory／Regular，其他平台不做事；gh-82） |
-| `paste_text` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | `text: String, restore_clipboard: bool` | `Result<PasteOutcome, ClipboardError>`（`"pasted"`／`"targetChanged"`：macOS 輸入目標已換時不貼、文字留在剪貼簿；fork 自訂） |
+| `paste_text` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | `text: String, restore_clipboard: bool` | `Result<PasteOutcome, ClipboardError>`（`"pasted"`／`"targetChanged"`：macOS 輸入目標已換時不貼、不碰剪貼簿，原目標暫存供貼回；fork 自訂） |
+| `paste_to_saved_target` | `plugins/clipboard_paste.rs` | useVoiceFlowStore（HUD「貼回原位置」） | `text: String, restore_clipboard: bool` | `Result<PasteOutcome, ClipboardError>`（切回原 App 與輸入框、確認後才貼；切不回回 `"targetUnavailable"`；macOS 限定，fork 自訂） |
 | `copy_to_clipboard` | `plugins/clipboard_paste.rs` | HistoryView | `text: String` | `Result<(), ClipboardError>` |
 | `capture_target_window` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | — | `()`（Windows 記前景視窗；macOS 記前景 App 與焦點元件，見 `focus_target.rs`） |
 | `set_recent_transcriptions` | `plugins/recent_tray.rs` | useHistoryStore | `items: Vec<RecentTrayItem { label, text }>`（最多 5 筆） | `Result<(), String>`（重建系統匣「最近紀錄」子選單，點選即複製；fork 自訂） |

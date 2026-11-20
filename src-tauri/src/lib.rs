@@ -478,6 +478,7 @@ pub fn run() {
             plugins::clipboard_paste::capture_target_window,
             plugins::clipboard_paste::copy_to_clipboard,
             plugins::clipboard_paste::paste_text,
+            plugins::clipboard_paste::paste_to_saved_target,
             plugins::recent_tray::set_recent_transcriptions,
             plugins::hotkey_listener::check_accessibility_permission_command,
             plugins::hotkey_listener::open_accessibility_settings,

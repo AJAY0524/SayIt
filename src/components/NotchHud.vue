@@ -34,10 +34,13 @@ const props = defineProps<{
   promptModeLabel: string;
   modeSwitchLabel: string;
   isEditMode: boolean;
+  /** 輸入目標已換、尚未貼上：顯示「貼回原位置」按鈕（fork 自訂） */
+  canPasteBack: boolean;
 }>();
 
 defineEmits<{
   retry: [];
+  pasteBack: [];
 }>();
 
 const visualMode = ref<VisualMode>("hidden");
@@ -87,8 +90,15 @@ const hasErrorMessage = computed(
   () => visualMode.value === "error" && props.message !== "",
 );
 
+const hasPasteBackRow = computed(
+  () => visualMode.value === "success" && props.canPasteBack,
+);
+
 const isExpandedMode = computed(
-  () => hasErrorMessage.value || visualMode.value === "learned",
+  () =>
+    hasErrorMessage.value ||
+    hasPasteBackRow.value ||
+    visualMode.value === "learned",
 );
 
 const notchStyle = computed(() => {
@@ -415,7 +425,7 @@ onUnmounted(() => {
               />
             </div>
             <svg
-              v-if="visualMode === 'success'"
+              v-if="visualMode === 'success' && !props.canPasteBack"
               class="checkmark-svg"
               width="18"
               height="18"
@@ -467,6 +477,15 @@ onUnmounted(() => {
 
       <div v-if="hasErrorMessage" class="error-message-row">
         <span class="error-message">{{ props.message }}</span>
+      </div>
+
+      <div v-if="hasPasteBackRow" class="paste-back-row">
+        <span class="paste-back-message">{{ props.message }}</span>
+        <span
+          class="paste-back-action"
+          role="button"
+          @click.stop="$emit('pasteBack')"
+        >{{ t('voiceFlow.pasteBack') }}</span>
       </div>
     </div>
   </div>
@@ -869,6 +888,40 @@ html.dark .notch-hud .prompt-mode-badge { background: rgba(255, 255, 255, 0.2); 
 }
 
 /* ---- Retry Icon ---- */
+.paste-back-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 40px 6px;
+  animation: errorMessageFadeIn 0.3s ease-out 0.2s both;
+}
+
+.paste-back-message {
+  color: #fbbf24;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.paste-back-action {
+  flex-shrink: 0;
+  color: #0a0a0a;
+  background: #fbbf24;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.paste-back-action:hover {
+  background: #fcd34d;
+}
+
 .retry-icon {
   color: #f97316;
   font-size: 16px;
@@ -878,6 +931,7 @@ html.dark .notch-hud .prompt-mode-badge { background: rgba(255, 255, 255, 0.2); 
 /* ---- Collapsing: 內容淡出 ---- */
 .notch-collapsing .notch-content,
 .notch-collapsing .error-message-row,
+.notch-collapsing .paste-back-row,
 .notch-collapsing .learned-terms-row {
   opacity: 0;
   transition: opacity 0.15s ease;

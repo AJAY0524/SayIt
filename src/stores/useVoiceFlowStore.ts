@@ -72,8 +72,8 @@ import type { VoiceFlowStateChangedPayload } from "../types/events";
 import { useSettingsStore } from "./useSettingsStore";
 
 const SUCCESS_DISPLAY_DURATION_MS = 1000;
-/** 輸入目標已換、文字只複製未貼上時，提示要按 Cmd+V，需要較長的閱讀時間 */
-const TARGET_CHANGED_DISPLAY_DURATION_MS = 4000;
+/** 輸入目標已換、尚未貼上時，「貼回原位置」按鈕的顯示時間 */
+const TARGET_CHANGED_DISPLAY_DURATION_MS = 8000;
 const ERROR_DISPLAY_DURATION_MS = 3000;
 const MAX_ENHANCEMENT_RETRY_COUNT = 3;
 const ERROR_WITH_RETRY_DISPLAY_DURATION_MS = 6000;
@@ -172,6 +172,12 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
   // 本世代的編輯模式已判定：之後才落地的探測結果不得再改寫（拒收晚到）
   let windowsSelectionDecidedEpoch = -1;
   const isRetryAttempt = ref<boolean>(false);
+  /** 輸入目標已換、等待「貼回原位置」的文字；null 表示沒有待貼回（fork 自訂） */
+  const pendingPasteBackText = ref<string | null>(null);
+  const canPasteBack = computed<boolean>(
+    () => status.value === "success" && pendingPasteBackText.value !== null,
+  );
+
   const canRetry = computed<boolean>(
     () =>
       status.value === "error" &&
@@ -403,6 +409,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     emitVoiceFlowStateChanged(nextStatus, nextMessage);
 
     if (nextStatus === "idle") {
+      pendingPasteBackText.value = null;
       stopMonitorPolling();
       collapseHideTimer = setTimeout(() => {
         hideHud().catch((err) => {
@@ -413,6 +420,10 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
         });
       }, COLLAPSE_HIDE_DELAY_MS);
       return;
+    }
+
+    if (nextStatus === "recording") {
+      pendingPasteBackText.value = null;
     }
 
     if (
@@ -430,12 +441,19 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     }
 
     if (nextStatus === "success") {
-      showHud().catch((err) => {
-        writeErrorLog(
-          `useVoiceFlowStore: showHud failed: ${extractErrorMessage(err)}`,
-        );
-        captureError(err, { source: "voice-flow", step: "showHud" });
-      });
+      showHud()
+        .then(async () => {
+          // 「貼回原位置」按鈕要能點：HUD 平常忽略滑鼠，這裡開啟（同 error 重試按鈕）
+          if (pendingPasteBackText.value !== null) {
+            await getAppWindow().setIgnoreCursorEvents(false);
+          }
+        })
+        .catch((err) => {
+          writeErrorLog(
+            `useVoiceFlowStore: showHud failed: ${extractErrorMessage(err)}`,
+          );
+          captureError(err, { source: "voice-flow", step: "showHud" });
+        });
       autoHideTimer = setTimeout(() => {
         transitionTo("idle");
       }, successDisplayMs);
@@ -821,6 +839,33 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     })();
   }
 
+  /** HUD「貼回原位置」：切回錄音開始時的 App 與輸入框再貼上（fork 自訂） */
+  async function handlePasteBack() {
+    const text = pendingPasteBackText.value;
+    if (text === null) return;
+    pendingPasteBackText.value = null;
+    try {
+      const settingsStore = useSettingsStore();
+      const outcome = await invoke<"pasted" | "targetUnavailable">(
+        "paste_to_saved_target",
+        {
+          text,
+          restoreClipboard: !settingsStore.isCopyTranscriptionToClipboardEnabled,
+        },
+      );
+      if (outcome === "pasted") {
+        transitionTo("success", t("voiceFlow.pasteSuccess"));
+      } else {
+        transitionTo("error", t("voiceFlow.pasteBackFailed"));
+      }
+    } catch (err) {
+      writeErrorLog(
+        `useVoiceFlowStore: paste_to_saved_target failed: ${extractErrorMessage(err)}`,
+      );
+      transitionTo("error", t("voiceFlow.pasteBackFailed"));
+    }
+  }
+
   async function completePasteFlow(params: {
     text: string;
     successMessage: string;
@@ -830,6 +875,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
   }) {
     try {
       const settingsStore = useSettingsStore();
+      pendingPasteBackText.value = null;
       const pasteOutcome = await invoke<"pasted" | "targetChanged" | undefined>(
         "paste_text",
         {
@@ -838,12 +884,14 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
         },
       );
       isRecording.value = false;
-      // macOS：輸入目標已換（別的 App 或輸入框），Rust 沒有送出貼上、文字留在剪貼簿
+      // macOS：輸入目標已換（別的 App 或輸入框），Rust 沒有貼上、也沒碰剪貼簿；
+      // HUD 顯示「貼回原位置」按鈕，文字另可從選單列「最近紀錄」取回
       const isTargetChanged = pasteOutcome === "targetChanged";
       if (isTargetChanged) {
+        pendingPasteBackText.value = params.text;
         transitionTo(
           "success",
-          t("voiceFlow.targetChangedCopied"),
+          t("voiceFlow.targetChanged"),
           TARGET_CHANGED_DISPLAY_DURATION_MS,
         );
       } else {
@@ -2213,6 +2261,8 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     recordingElapsedSeconds,
     lastWasModified,
     canRetry,
+    canPasteBack,
+    handlePasteBack,
     modeSwitchLabel,
     isEditMode,
     initialize,

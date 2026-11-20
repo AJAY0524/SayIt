@@ -26,7 +26,7 @@ pub fn decide(saved_pid: i32, current_pid: i32, element_equal: Option<bool>) -> 
 }
 
 #[cfg(target_os = "macos")]
-pub use macos_impl::{capture, compare, FocusTarget};
+pub use macos_impl::{capture, compare, refocus, FocusTarget};
 
 #[cfg(target_os = "macos")]
 mod macos_impl {
@@ -41,15 +41,23 @@ mod macos_impl {
     const AX_MESSAGING_TIMEOUT_SECS: f32 = 0.25;
 
     extern "C" {
-        fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+        fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
         fn AXUIElementCopyAttributeValue(
             element: AXUIElementRef,
             attribute: CFTypeRef,
             value: *mut CFTypeRef,
         ) -> AXError;
-        fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
         fn AXUIElementSetMessagingTimeout(element: AXUIElementRef, timeout: f32) -> AXError;
+        fn AXUIElementSetAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFTypeRef,
+            value: CFTypeRef,
+        ) -> AXError;
     }
+
+    /// 切回後等焦點落定的上限與輪詢間隔
+    const REFOCUS_TIMEOUT_MS: u64 = 800;
+    const REFOCUS_POLL_MS: u64 = 40;
 
     /// 持有一個 retain 過的 CF 物件，drop 時 release。
     struct OwnedCf(CFTypeRef);
@@ -84,23 +92,82 @@ mod macos_impl {
         }
     }
 
+    /// 前景 App 的 pid。用 NSWorkspace 而非 AX 系統層級的 AXFocusedApplication：
+    /// 後者實測會回 kAXErrorCannotComplete（-25204），前者穩定。
+    fn frontmost_pid() -> Option<i32> {
+        unsafe {
+            let workspace: *mut objc::runtime::Object =
+                msg_send![class!(NSWorkspace), sharedWorkspace];
+            if workspace.is_null() {
+                return None;
+            }
+            let app: *mut objc::runtime::Object = msg_send![workspace, frontmostApplication];
+            if app.is_null() {
+                return None;
+            }
+            let pid: i32 = msg_send![app, processIdentifier];
+            (pid > 0).then_some(pid)
+        }
+    }
+
     /// 讀目前的前景 App pid 與焦點元件；讀不到前景 App 回 None。
     pub fn capture() -> Option<FocusTarget> {
-        let system_wide = OwnedCf(unsafe { AXUIElementCreateSystemWide() });
-        if system_wide.0.is_null() {
-            return None;
-        }
-        unsafe { AXUIElementSetMessagingTimeout(system_wide.0, AX_MESSAGING_TIMEOUT_SECS) };
-
-        let app = copy_attribute(system_wide.0, "AXFocusedApplication")?;
-        let mut pid: i32 = 0;
-        if unsafe { AXUIElementGetPid(app.0, &mut pid) } != K_AX_ERROR_SUCCESS || pid <= 0 {
-            return None;
+        let pid = frontmost_pid()?;
+        let app = OwnedCf(unsafe { AXUIElementCreateApplication(pid) });
+        if app.0.is_null() {
+            return Some(FocusTarget { pid, element: None });
         }
         unsafe { AXUIElementSetMessagingTimeout(app.0, AX_MESSAGING_TIMEOUT_SECS) };
         let element = copy_attribute(app.0, "AXFocusedUIElement");
-
         Some(FocusTarget { pid, element })
+    }
+
+    fn set_bool_attribute(element: AXUIElementRef, name: &str) -> AXError {
+        let attr = CFString::new(name);
+        let value = core_foundation::boolean::CFBoolean::true_value();
+        unsafe { AXUIElementSetAttributeValue(element, attr.as_CFTypeRef(), value.as_CFTypeRef()) }
+    }
+
+    /// 切回錄音開始時的 App 與輸入框，等到比對結果為 Same 才回 true。
+    /// 同時用 NSRunningApplication 與 AX 的 AXFrontmost：前者在 SayIt 非作用中時可能被系統忽略。
+    pub fn refocus(target: &FocusTarget) -> bool {
+        unsafe {
+            let app: *mut objc::runtime::Object = msg_send![
+                class!(NSRunningApplication),
+                runningApplicationWithProcessIdentifier: target.pid
+            ];
+            if app.is_null() {
+                log::info!(
+                    "[focus-target] refocus: app pid={} no longer running",
+                    target.pid
+                );
+                return false;
+            }
+            // NSApplicationActivateIgnoringOtherApps = 1 << 1
+            let _: bool = msg_send![app, activateWithOptions: 2u64];
+        }
+        let app_element = OwnedCf(unsafe { AXUIElementCreateApplication(target.pid) });
+        if !app_element.0.is_null() {
+            unsafe { AXUIElementSetMessagingTimeout(app_element.0, AX_MESSAGING_TIMEOUT_SECS) };
+            let err = set_bool_attribute(app_element.0, "AXFrontmost");
+            log::info!("[focus-target] refocus: set AXFrontmost → {err}");
+        }
+        if let Some(element) = &target.element {
+            let err = set_bool_attribute(element.0, "AXFocused");
+            log::info!("[focus-target] refocus: set AXFocused → {err}");
+        }
+
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_millis(REFOCUS_TIMEOUT_MS);
+        loop {
+            if compare(target) == TargetMatch::Same {
+                return true;
+            }
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(REFOCUS_POLL_MS));
+        }
     }
 
     /// 比對目前焦點與錄音開始時的目標。
