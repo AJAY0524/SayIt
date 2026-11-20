@@ -438,7 +438,14 @@
       "newVersionTitle": "New Version Available",
       "newVersionDescription": "SayIt v{version} is available. Click Start Update to download and restart the application automatically.",
       "cancel": "Cancel",
-      "startUpdate": "Start Update"
+      "startUpdate": "Start Update",
+      "fork": {
+        "title": "Upstream released SayIt v{version}",
+        "description": "This is your custom build, so the upstream installer is not installed automatically (it would replace your custom features). Review the release notes, then ask Claude to sync upstream and rebuild.",
+        "viewRelease": "View release notes",
+        "sidebarBadge": "Upstream v{version}",
+        "openFailed": "Could not open the upstream release page"
+      }
     },
     "upgradeNotice": {
       "title": "What's New in SayIt",

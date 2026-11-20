@@ -438,7 +438,14 @@
       "newVersionTitle": "发现新版本",
       "newVersionDescription": "SayIt v{version} 已可供更新。点击开始更新将自动下载并重新启动应用程序。",
       "cancel": "取消",
-      "startUpdate": "开始更新"
+      "startUpdate": "开始更新",
+      "fork": {
+        "title": "上游发布了 SayIt v{version}",
+        "description": "这是你的自建版，不会自动安装上游安装包（会覆盖自定义功能）。请先查看更新内容，再请 Claude 同步上游并重建安装。",
+        "viewRelease": "查看更新内容",
+        "sidebarBadge": "上游 v{version}",
+        "openFailed": "无法打开上游发布页"
+      }
     },
     "upgradeNotice": {
       "title": "SayIt 更新摘要",

@@ -438,7 +438,14 @@
       "newVersionTitle": "새 버전 발견",
       "newVersionDescription": "SayIt v{version} 업데이트가 가능합니다. 업데이트 시작을 클릭하면 자동으로 다운로드 후 앱이 재시작됩니다.",
       "cancel": "취소",
-      "startUpdate": "업데이트 시작"
+      "startUpdate": "업데이트 시작",
+      "fork": {
+        "title": "업스트림이 SayIt v{version}을 출시했습니다",
+        "description": "사용자 지정 빌드이므로 업스트림 설치 파일은 자동으로 설치되지 않습니다(사용자 지정 기능이 덮어써집니다). 변경 내용을 확인한 뒤 Claude에게 업스트림 동기화와 재빌드를 요청하세요.",
+        "viewRelease": "변경 내용 보기",
+        "sidebarBadge": "업스트림 v{version}",
+        "openFailed": "업스트림 릴리스 페이지를 열 수 없습니다"
+      }
     },
     "upgradeNotice": {
       "title": "SayIt 업데이트 요약",

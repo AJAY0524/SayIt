@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   BookOpen,
-  Download,
+  ExternalLink,
   FileText,
   LayoutDashboard,
   Lightbulb,
@@ -70,7 +70,8 @@ const databaseError = ref(getDatabaseInitError());
 const showAccessibilityGuide = ref(false);
 
 // ── 更新相關狀態 ──
-type UpdateUiState = "idle" | "checking" | "downloading" | "ready-to-install" | "installing";
+// fork 自建版：發現上游新版只通知（upstream-available），不下載、不安裝
+type UpdateUiState = "idle" | "checking" | "upstream-available";
 const updateState = ref<UpdateUiState>("idle");
 const availableVersion = ref("");
 const updateFeedback = useFeedbackMessage();
@@ -80,8 +81,7 @@ let autoCheckTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let autoCheckIntervalId: ReturnType<typeof setInterval> | null = null;
 
 // AlertDialog 控制
-const showManualUpdateDialog = ref(false);
-const showAutoInstallDialog = ref(false);
+const showUpstreamUpdateDialog = ref(false);
 
 // 升級提示（watch 而非 onMounted，因為 loadSettings 在 mount 之後才執行）
 const settingsStore = useSettingsStore();
@@ -94,24 +94,20 @@ watch(() => settingsStore.showPromptUpgradeNotice, (shouldShow) => {
   }
 });
 
-// ── 流程 1：自動偵測（靜默檢查 → 靜默下載 → 通知安裝） ──
+// ── 流程 1：自動偵測（靜默檢查 → 通知上游有新版） ──
 async function autoCheckAndDownload() {
   if (updateState.value !== "idle") return;
 
   try {
-    const { checkForAppUpdate, downloadUpdate } = await import("./lib/autoUpdater");
+    const { checkForAppUpdate } = await import("./lib/autoUpdater");
     const result = await checkForAppUpdate();
 
     if (result.status !== "update-available" || !result.version) return;
 
     availableVersion.value = result.version;
-    updateState.value = "downloading";
+    // 進入 upstream-available 後自動檢查不再重複彈窗，直到重新啟動
+    updateState.value = "upstream-available";
 
-    await downloadUpdate();
-
-    updateState.value = "ready-to-install";
-
-    // 確保 Dashboard 可見再彈 dialog
     // gh-76：使用者開了「啟動時隱藏主視窗」就不主動跳出來，對話框留在視窗內、開啟時再看
     if (!settingsStore.isStartHiddenEnabled) {
       const currentWindow = getCurrentWindow();
@@ -119,49 +115,33 @@ async function autoCheckAndDownload() {
       await currentWindow.setFocus();
     }
 
-    showAutoInstallDialog.value = true;
+    showUpstreamUpdateDialog.value = true;
   } catch (err) {
-    console.error("[main-window] Auto update check/download failed:", err);
+    console.error("[main-window] Auto update check failed:", err);
     captureError(err, { source: "updater", step: "auto-check" });
     updateState.value = "idle";
   }
 }
 
-// 使用者在自動流程的 AlertDialog 中點「安裝並重啟」
-async function handleAutoInstall() {
-  showAutoInstallDialog.value = false;
-  updateState.value = "installing";
+// 對話框或 sidebar 的「查看更新內容」：開上游 release 頁
+async function handleOpenUpstreamRelease() {
+  showUpstreamUpdateDialog.value = false;
   try {
-    const { installAndRelaunch } = await import("./lib/autoUpdater");
-    await installAndRelaunch();
+    const { openUpstreamRelease } = await import("./lib/autoUpdater");
+    await openUpstreamRelease(availableVersion.value);
   } catch (err) {
-    console.error("[main-window] Auto install failed:", err);
-    updateFeedback.show("error", t("mainApp.update.installFailed"));
-    updateState.value = "idle";
-    availableVersion.value = "";
+    console.error("[main-window] Open upstream release failed:", err);
+    updateFeedback.show("error", t("mainApp.update.fork.openFailed"));
   }
-}
-
-// 使用者在自動流程的 AlertDialog 中點「稍後」
-function handleAutoInstallLater() {
-  showAutoInstallDialog.value = false;
-  // 保持 ready-to-install 狀態，sidebar 仍顯示「立即安裝」按鈕
-}
-
-// sidebar footer 的「立即安裝」按鈕（自動下載完成後顯示）
-async function handleSidebarInstall() {
-  showAutoInstallDialog.value = true;
 }
 
 // ── 流程 2：手動檢查更新 ──
 async function handleManualCheck() {
-  if (updateState.value !== "idle" && updateState.value !== "ready-to-install") return;
-
-  // 如果已有待安裝的更新，直接彈 dialog
-  if (updateState.value === "ready-to-install") {
-    showAutoInstallDialog.value = true;
+  if (updateState.value === "upstream-available") {
+    showUpstreamUpdateDialog.value = true;
     return;
   }
+  if (updateState.value !== "idle") return;
 
   updateState.value = "checking";
   try {
@@ -182,26 +162,11 @@ function handleManualCheckResult(result: UpdateCheckResult) {
     updateState.value = "idle";
   } else if (result.status === "update-available") {
     availableVersion.value = result.version ?? "";
-    updateState.value = "idle";
-    showManualUpdateDialog.value = true;
+    updateState.value = "upstream-available";
+    showUpstreamUpdateDialog.value = true;
   } else {
     updateFeedback.show("error", t("mainApp.update.checkFailed"));
     updateState.value = "idle";
-  }
-}
-
-// 使用者在手動流程的 AlertDialog 中點「開始更新」
-async function handleManualUpdate() {
-  showManualUpdateDialog.value = false;
-  updateState.value = "downloading";
-  try {
-    const { downloadInstallAndRelaunch } = await import("./lib/autoUpdater");
-    await downloadInstallAndRelaunch();
-  } catch (err) {
-    console.error("[main-window] Manual update failed:", err);
-    updateFeedback.show("error", t("mainApp.update.updateFailed"));
-    updateState.value = "idle";
-    availableVersion.value = "";
   }
 }
 
@@ -209,17 +174,11 @@ async function handleManualUpdate() {
 const updateButtonLabel = computed(() => {
   switch (updateState.value) {
     case "checking": return t("mainApp.update.checking");
-    case "downloading": return t("mainApp.update.downloading");
-    case "installing": return t("mainApp.update.installing");
     default: return t("mainApp.update.checkUpdate");
   }
 });
 
-const isUpdateBusy = computed(() =>
-  updateState.value === "checking" ||
-  updateState.value === "downloading" ||
-  updateState.value === "installing"
-);
+const isUpdateBusy = computed(() => updateState.value === "checking");
 
 
 const vocabularyStore = useVocabularyStore();
@@ -300,9 +259,9 @@ onUnmounted(() => {
       <SidebarFooter class="border-t border-sidebar-border px-4 py-2">
         <div class="flex items-center justify-between">
           <span class="text-xs text-muted-foreground">v{{ appVersion }}</span>
-          <!-- ready-to-install 時不顯示檢查按鈕，改顯示安裝提示 -->
+          <!-- 上游有新版時不顯示檢查按鈕，改顯示通知 -->
           <Button
-            v-if="updateState !== 'ready-to-install'"
+            v-if="updateState !== 'upstream-available'"
             variant="link"
             class="h-auto p-0 text-xs text-muted-foreground"
             :disabled="isUpdateBusy"
@@ -311,16 +270,16 @@ onUnmounted(() => {
             {{ updateButtonLabel }}
           </Button>
         </div>
-        <!-- 自動下載完成：顯示持久的安裝提示 -->
-        <div v-if="updateState === 'ready-to-install'" class="mt-1.5 flex items-center justify-between rounded-md bg-primary/10 px-2 py-1.5">
-          <span class="text-xs font-medium text-primary">v{{ availableVersion }} {{ $t("mainApp.update.ready") }}</span>
+        <!-- 上游有新版：持久提示，點擊開 release 頁 -->
+        <div v-if="updateState === 'upstream-available'" class="mt-1.5 flex items-center justify-between rounded-md bg-primary/10 px-2 py-1.5">
+          <span class="text-xs font-medium text-primary">{{ $t("mainApp.update.fork.sidebarBadge", { version: availableVersion }) }}</span>
           <Button
             size="sm"
             class="h-6 gap-1 px-2 text-xs"
-            @click="handleSidebarInstall"
+            @click="handleOpenUpstreamRelease"
           >
-            <Download class="h-3 w-3" />
-            {{ $t("mainApp.update.installNow") }}
+            <ExternalLink class="h-3 w-3" />
+            {{ $t("mainApp.update.fork.viewRelease") }}
           </Button>
         </div>
         <p
@@ -353,22 +312,6 @@ onUnmounted(() => {
     @close="showAccessibilityGuide = false"
   />
 
-  <!-- 自動流程 AlertDialog：更新已下載，詢問是否安裝重啟 -->
-  <AlertDialog :open="showAutoInstallDialog">
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>{{ $t("mainApp.update.autoInstallTitle") }}</AlertDialogTitle>
-        <AlertDialogDescription>
-          {{ $t("mainApp.update.autoInstallDescription", { version: availableVersion }) }}
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel @click="handleAutoInstallLater">{{ $t("mainApp.update.later") }}</AlertDialogCancel>
-        <AlertDialogAction @click="handleAutoInstall">{{ $t("mainApp.update.installRestart") }}</AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
-
   <!-- 升級提示 AlertDialog -->
   <AlertDialog :open="showUpgradeNoticeDialog">
     <AlertDialogContent>
@@ -388,18 +331,18 @@ onUnmounted(() => {
     </AlertDialogContent>
   </AlertDialog>
 
-  <!-- 手動流程 AlertDialog：發現新版本，詢問是否開始更新 -->
-  <AlertDialog :open="showManualUpdateDialog">
+  <!-- 上游新版通知：fork 自建版不安裝上游安裝包，只開 release 頁 -->
+  <AlertDialog :open="showUpstreamUpdateDialog">
     <AlertDialogContent>
       <AlertDialogHeader>
-        <AlertDialogTitle>{{ $t("mainApp.update.newVersionTitle") }}</AlertDialogTitle>
+        <AlertDialogTitle>{{ $t("mainApp.update.fork.title", { version: availableVersion }) }}</AlertDialogTitle>
         <AlertDialogDescription>
-          {{ $t("mainApp.update.newVersionDescription", { version: availableVersion }) }}
+          {{ $t("mainApp.update.fork.description", { version: availableVersion }) }}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel @click="showManualUpdateDialog = false">{{ $t("mainApp.update.cancel") }}</AlertDialogCancel>
-        <AlertDialogAction @click="handleManualUpdate">{{ $t("mainApp.update.startUpdate") }}</AlertDialogAction>
+        <AlertDialogCancel @click="showUpstreamUpdateDialog = false">{{ $t("mainApp.update.later") }}</AlertDialogCancel>
+        <AlertDialogAction @click="handleOpenUpstreamRelease">{{ $t("mainApp.update.fork.viewRelease") }}</AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

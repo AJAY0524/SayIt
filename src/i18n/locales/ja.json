@@ -438,7 +438,14 @@
       "newVersionTitle": "新しいバージョンが見つかりました",
       "newVersionDescription": "SayIt v{version} が利用可能です。更新を開始すると、自動的にダウンロードされアプリが再起動します。",
       "cancel": "キャンセル",
-      "startUpdate": "更新を開始"
+      "startUpdate": "更新を開始",
+      "fork": {
+        "title": "上流が SayIt v{version} をリリースしました",
+        "description": "これはカスタムビルドのため、上流のインストーラーは自動でインストールされません（カスタム機能が上書きされます）。更新内容を確認してから、Claude に上流の同期と再ビルドを依頼してください。",
+        "viewRelease": "更新内容を見る",
+        "sidebarBadge": "上流 v{version}",
+        "openFailed": "上流のリリースページを開けませんでした"
+      }
     },
     "upgradeNotice": {
       "title": "SayIt 更新のお知らせ",
