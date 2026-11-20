@@ -352,7 +352,8 @@
     "retryFailed": "辨識失敗，請重新錄音",
     "cancelled": "已取消",
     "modeSwitched": "已切換至{mode}模式",
-    "commandMode": "指令"
+    "commandMode": "指令",
+    "targetChangedCopied": "輸入位置已改變，文字已複製，請按 ⌘V 貼上"
   },
   "errors": {
     "databaseInitFailed": "資料庫初始化失敗，歷史記錄暫時無法使用。請重新啟動應用程式。",

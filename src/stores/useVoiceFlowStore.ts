@@ -72,6 +72,8 @@ import type { VoiceFlowStateChangedPayload } from "../types/events";
 import { useSettingsStore } from "./useSettingsStore";
 
 const SUCCESS_DISPLAY_DURATION_MS = 1000;
+/** 輸入目標已換、文字只複製未貼上時，提示要按 Cmd+V，需要較長的閱讀時間 */
+const TARGET_CHANGED_DISPLAY_DURATION_MS = 4000;
 const ERROR_DISPLAY_DURATION_MS = 3000;
 const MAX_ENHANCEMENT_RETRY_COUNT = 3;
 const ERROR_WITH_RETRY_DISPLAY_DURATION_MS = 6000;
@@ -389,7 +391,11 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
     };
   }
 
-  function transitionTo(nextStatus: HudStatus, nextMessage = "") {
+  function transitionTo(
+    nextStatus: HudStatus,
+    nextMessage = "",
+    successDisplayMs = SUCCESS_DISPLAY_DURATION_MS,
+  ) {
     clearAutoHideTimer();
     clearCollapseHideTimer();
     status.value = nextStatus;
@@ -432,7 +438,7 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
       });
       autoHideTimer = setTimeout(() => {
         transitionTo("idle");
-      }, SUCCESS_DISPLAY_DURATION_MS);
+      }, successDisplayMs);
       return;
     }
 
@@ -824,13 +830,26 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
   }) {
     try {
       const settingsStore = useSettingsStore();
-      await invoke("paste_text", {
-        text: params.text,
-        restoreClipboard: !settingsStore.isCopyTranscriptionToClipboardEnabled,
-      });
+      const pasteOutcome = await invoke<"pasted" | "targetChanged" | undefined>(
+        "paste_text",
+        {
+          text: params.text,
+          restoreClipboard: !settingsStore.isCopyTranscriptionToClipboardEnabled,
+        },
+      );
       isRecording.value = false;
-      transitionTo("success", params.successMessage);
-      startQualityMonitorAfterPaste();
+      // macOS：輸入目標已換（別的 App 或輸入框），Rust 沒有送出貼上、文字留在剪貼簿
+      const isTargetChanged = pasteOutcome === "targetChanged";
+      if (isTargetChanged) {
+        transitionTo(
+          "success",
+          t("voiceFlow.targetChangedCopied"),
+          TARGET_CHANGED_DISPLAY_DURATION_MS,
+        );
+      } else {
+        transitionTo("success", params.successMessage);
+        startQualityMonitorAfterPaste();
+      }
       // api_usage FK 依賴 transcriptions — 必須等 transcription 寫入後才存 usage
       // retry 路徑使用 updateTranscriptionOnRetrySuccess，不走 INSERT
       if (!params.skipRecordSaving) {
@@ -843,9 +862,9 @@ export const useVoiceFlowStore = defineStore("voice-flow", () => {
       const finalText = params.record.processedText ?? params.record.rawText;
       updateVocabularyWeightsAfterPaste(finalText);
 
-      // 修正偵測（fire-and-forget，需 LLM API key）
+      // 修正偵測（fire-and-forget，需 LLM API key）；沒貼上就沒有可監看的欄位
       const llmApiKey = settingsStore.getLlmApiKey();
-      if (llmApiKey) {
+      if (llmApiKey && !isTargetChanged) {
         startCorrectionDetectionFlow(params.text, params.record.id, llmApiKey);
       }
     } catch (pasteError) {

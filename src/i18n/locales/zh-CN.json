@@ -352,7 +352,8 @@
     "retryFailed": "识别失败，请重新录音",
     "cancelled": "已取消",
     "modeSwitched": "已切换至{mode}模式",
-    "commandMode": "指令"
+    "commandMode": "指令",
+    "targetChangedCopied": "输入位置已改变，文字已复制，请按 ⌘V 粘贴"
   },
   "errors": {
     "databaseInitFailed": "数据库初始化失败，历史记录暂时无法使用。请重新启动应用程序。",

@@ -477,6 +477,31 @@ describe("useVoiceFlowStore", () => {
     });
   });
 
+  it("[P0] 輸入目標已換（paste_text 回 targetChanged）：HUD 提示按 ⌘V，不啟動品質與修正監看", async () => {
+    const base = createMockInvokeHandler();
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "paste_text") return "targetChanged";
+      return base(cmd, args);
+    });
+    const store = useVoiceFlowStore();
+    await store.initialize();
+
+    triggerHotkeyEvent("hotkey:pressed");
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("start_recording", {
+        deviceName: "",
+      });
+    });
+    triggerHotkeyEvent("hotkey:released");
+    await vi.waitFor(() => {
+      expect(store.status).toBe("success");
+    });
+
+    expect(store.message).toBe("voiceFlow.targetChangedCopied");
+    expect(mockInvoke).not.toHaveBeenCalledWith("start_quality_monitor");
+    expect(mockInvoke).not.toHaveBeenCalledWith("start_correction_monitor");
+  });
+
   describe("選取偵測三態（#24/#25 編輯模式判定）", () => {
     function withSelectionState(
       state: { kind: string; text: string | null },

@@ -21,9 +21,9 @@ paths:
 | `get_hud_target_position` | `lib.rs` | — | `app: AppHandle` | `Result<HudTargetPosition, String>` |
 | `get_os_theme` | `lib.rs` | lib/theme.ts | — | `Option<String>`（`"dark"` \| `"light"`，非 Windows 回 `null`） |
 | `set_dock_icon_hidden` | `lib.rs` | useSettingsStore | `hidden: bool` | `Result<(), String>`（macOS 切換啟用策略 Accessory／Regular，其他平台不做事；gh-82） |
-| `paste_text` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | `text: String` | `Result<(), ClipboardError>` |
+| `paste_text` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | `text: String, restore_clipboard: bool` | `Result<PasteOutcome, ClipboardError>`（`"pasted"`／`"targetChanged"`：macOS 輸入目標已換時不貼、文字留在剪貼簿；fork 自訂） |
 | `copy_to_clipboard` | `plugins/clipboard_paste.rs` | HistoryView | `text: String` | `Result<(), ClipboardError>` |
-| `capture_target_window` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | — | `()` |
+| `capture_target_window` | `plugins/clipboard_paste.rs` | useVoiceFlowStore | — | `()`（Windows 記前景視窗；macOS 記前景 App 與焦點元件，見 `focus_target.rs`） |
 | `check_accessibility_permission_command` | `plugins/hotkey_listener.rs` | AccessibilityGuide.vue | — | `bool` |
 | `open_accessibility_settings` | `plugins/hotkey_listener.rs` | AccessibilityGuide.vue | — | `Result<(), String>` |
 | `reinitialize_hotkey_listener` | `plugins/hotkey_listener.rs` | AccessibilityGuide.vue | `app: AppHandle` | `Result<(), String>` |

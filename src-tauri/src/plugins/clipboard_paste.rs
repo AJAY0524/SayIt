@@ -15,6 +15,9 @@ const RESTORE_DELAY_MS: u64 = 200;
 pub struct FocusState {
     #[cfg(target_os = "windows")]
     target_hwnd: std::sync::Mutex<isize>,
+    /// macOS：錄音開始時的前景 App 與焦點元件，貼上前比對（fork 自訂，見 focus_target.rs）
+    #[cfg(target_os = "macos")]
+    target: std::sync::Mutex<Option<super::focus_target::FocusTarget>>,
 }
 
 impl FocusState {
@@ -22,8 +25,20 @@ impl FocusState {
         Self {
             #[cfg(target_os = "windows")]
             target_hwnd: std::sync::Mutex::new(0),
+            #[cfg(target_os = "macos")]
+            target: std::sync::Mutex::new(None),
         }
     }
+}
+
+// ========== Paste Outcome ==========
+
+/// `paste_text` 的結果：`targetChanged` 表示輸入目標已換，沒有送出貼上，文字留在剪貼簿。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PasteOutcome {
+    Pasted,
+    TargetChanged,
 }
 
 // ========== Errors ==========
@@ -284,7 +299,22 @@ pub fn capture_target_window(state: State<'_, FocusState>) {
             log::info!("[clipboard-paste] Captured target window: {:?}", hwnd);
         }
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let captured = super::focus_target::capture();
+        log::info!(
+            "[clipboard-paste] Captured target: {}",
+            if captured.is_some() {
+                "ok"
+            } else {
+                "unavailable"
+            }
+        );
+        if let Ok(mut guard) = state.target.lock() {
+            *guard = captured;
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = state;
     }
@@ -368,7 +398,7 @@ pub fn paste_text<R: Runtime>(
     focus_state: State<'_, FocusState>,
     text: String,
     restore_clipboard: bool,
-) -> Result<(), ClipboardError> {
+) -> Result<PasteOutcome, ClipboardError> {
     // DEBUG: 追蹤 paste_text 被呼叫次數
     use std::sync::atomic::AtomicU32;
     static PASTE_CALL_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -390,6 +420,24 @@ pub fn paste_text<R: Runtime>(
 
     let mut clipboard =
         Clipboard::new().map_err(|e| ClipboardError::ClipboardAccess(e.to_string()))?;
+
+    // macOS：輸入目標已換（別的 App 或別的輸入框）就不貼，文字留在剪貼簿讓使用者自己貼。
+    // take() 讓同一次擷取只用一次，避免之後的貼上拿到過期目標
+    #[cfg(target_os = "macos")]
+    {
+        let saved = focus_state.target.lock().ok().and_then(|mut g| g.take());
+        let matched = saved
+            .as_ref()
+            .map(super::focus_target::compare)
+            .unwrap_or(super::focus_target::TargetMatch::Unknown);
+        if matched == super::focus_target::TargetMatch::Changed {
+            clipboard
+                .set_text(&text)
+                .map_err(|e| ClipboardError::ClipboardAccess(e.to_string()))?;
+            log::info!("[clipboard-paste] Target changed — skipped paste, text left in clipboard");
+            return Ok(PasteOutcome::TargetChanged);
+        }
+    }
 
     // 若使用者要求還原，先抓快照。Err 涵蓋非文字內容／暫時鎖等情況，視為「無可還原」
     let original_text = if restore_clipboard {
@@ -428,7 +476,6 @@ pub fn paste_text<R: Runtime>(
 
     #[cfg(target_os = "macos")]
     {
-        let _ = &focus_state; // macOS 不需要焦點恢復（CGEvent 是進程級）
         match simulate_paste_via_cgevent() {
             Ok(()) => log::info!("[clipboard-paste] Paste triggered via CGEvent (Cmd+V)"),
             Err(e) => {
@@ -472,7 +519,7 @@ pub fn paste_text<R: Runtime>(
     }
 
     log::info!("[clipboard-paste] Done");
-    Ok(())
+    Ok(PasteOutcome::Pasted)
 }
 
 #[cfg(test)]

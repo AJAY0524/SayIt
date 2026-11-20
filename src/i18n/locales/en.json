@@ -352,7 +352,8 @@
     "retryFailed": "Recognition failed, please record again",
     "cancelled": "Cancelled",
     "modeSwitched": "Switched to {mode} mode",
-    "commandMode": "Command"
+    "commandMode": "Command",
+    "targetChangedCopied": "Input target changed. Text copied — press ⌘V to paste"
   },
   "errors": {
     "databaseInitFailed": "Database initialization failed. History is temporarily unavailable. Please restart the app.",
