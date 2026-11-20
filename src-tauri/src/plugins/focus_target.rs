@@ -1,7 +1,7 @@
 //! 錄音開始時記住輸入目標（前景 App + 焦點元件），貼上前比對是否仍是同一個。
 //!
 //! 辨識較久或使用者手速快時，完成當下焦點可能已移到別的 App 或別的輸入框；
-//! 此時不送 Cmd+V，改把文字留在剪貼簿讓使用者自行貼上（fork 自訂，macOS 限定）。
+//! 此時不送 Cmd+V、也不碰剪貼簿，HUD 改提供「貼回原位置」（fork 自訂，macOS 限定）。
 
 /// 貼上前比對結果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,12 +14,27 @@ pub enum TargetMatch {
     Unknown,
 }
 
-/// 依 pid 與元件比對結果判定。`element_equal` 為 `None` 表示任一端讀不到焦點元件，只看 pid。
-pub fn decide(saved_pid: i32, current_pid: i32, element_equal: Option<bool>) -> TargetMatch {
+/// 判定輸入目標是否已換。
+///
+/// - `element_equal`：錄音開始時與現在的焦點元件是否相同（任一端讀不到為 `None`）
+/// - `saved_still_focused`：錄音開始時那個元件現在的 AXFocused（元件已失效或讀不到為 `None`）
+///
+/// 同一個 App 內只有「原元件還在、而且已經不是焦點」才算換了。Electron 被戳醒
+/// AXManualAccessibility、或網頁重繪時元件會整棵重建，舊元件失效，這時無法判斷，
+/// 一律當作沒換，避免把正常的聽寫誤判成不貼上。
+pub fn decide(
+    saved_pid: i32,
+    current_pid: i32,
+    element_equal: Option<bool>,
+    saved_still_focused: Option<bool>,
+) -> TargetMatch {
     if saved_pid != current_pid {
         return TargetMatch::Changed;
     }
-    match element_equal {
+    if element_equal == Some(true) {
+        return TargetMatch::Same;
+    }
+    match saved_still_focused {
         Some(false) => TargetMatch::Changed,
         _ => TargetMatch::Same,
     }
@@ -170,6 +185,14 @@ mod macos_impl {
         }
     }
 
+    /// 讀元件目前的 AXFocused；元件已失效或讀不到回 None。
+    fn read_focused(element: AXUIElementRef) -> Option<bool> {
+        unsafe { AXUIElementSetMessagingTimeout(element, AX_MESSAGING_TIMEOUT_SECS) };
+        let value = copy_attribute(element, "AXFocused")?;
+        let true_value = core_foundation::boolean::CFBoolean::true_value();
+        Some(value.0 == true_value.as_CFTypeRef())
+    }
+
     /// 比對目前焦點與錄音開始時的目標。
     pub fn compare(saved: &FocusTarget) -> TargetMatch {
         let Some(current) = capture() else {
@@ -179,12 +202,18 @@ mod macos_impl {
             (Some(a), Some(b)) => Some(unsafe { CFEqual(a.0, b.0) } != 0),
             _ => None,
         };
-        let result = decide(saved.pid, current.pid, element_equal);
+        let saved_still_focused = if saved.pid == current.pid && element_equal != Some(true) {
+            saved.element.as_ref().and_then(|e| read_focused(e.0))
+        } else {
+            None
+        };
+        let result = decide(saved.pid, current.pid, element_equal, saved_still_focused);
         log::info!(
-            "[focus-target] saved pid={} current pid={} element_equal={:?} → {:?}",
+            "[focus-target] saved pid={} current pid={} element_equal={:?} saved_still_focused={:?} → {:?}",
             saved.pid,
             current.pid,
             element_equal,
+            saved_still_focused,
             result
         );
         result
@@ -197,22 +226,30 @@ mod tests {
 
     #[test]
     fn test_decide_different_app_is_changed() {
-        assert_eq!(decide(100, 200, Some(true)), TargetMatch::Changed);
-        assert_eq!(decide(100, 200, None), TargetMatch::Changed);
-    }
-
-    #[test]
-    fn test_decide_same_app_different_field_is_changed() {
-        assert_eq!(decide(100, 100, Some(false)), TargetMatch::Changed);
+        assert_eq!(decide(100, 200, Some(true), None), TargetMatch::Changed);
+        assert_eq!(decide(100, 200, None, None), TargetMatch::Changed);
     }
 
     #[test]
     fn test_decide_same_app_same_field_is_same() {
-        assert_eq!(decide(100, 100, Some(true)), TargetMatch::Same);
+        assert_eq!(decide(100, 100, Some(true), None), TargetMatch::Same);
     }
 
     #[test]
-    fn test_decide_same_app_unknown_field_falls_back_to_same() {
-        assert_eq!(decide(100, 100, None), TargetMatch::Same);
+    fn test_decide_same_app_moved_to_other_field_is_changed() {
+        // 原元件還在、但已不是焦點：使用者確實點到別的輸入框
+        assert_eq!(
+            decide(100, 100, Some(false), Some(false)),
+            TargetMatch::Changed
+        );
+    }
+
+    #[test]
+    fn test_decide_same_app_rebuilt_tree_is_same() {
+        // Electron／網頁重建後舊元件失效（讀不到 AXFocused）：無法判斷，當作沒換
+        assert_eq!(decide(100, 100, Some(false), None), TargetMatch::Same);
+        // 元件物件不同但原元件仍是焦點
+        assert_eq!(decide(100, 100, Some(false), Some(true)), TargetMatch::Same);
+        assert_eq!(decide(100, 100, None, None), TargetMatch::Same);
     }
 }

@@ -45,6 +45,8 @@ impl FocusState {
 #[serde(rename_all = "camelCase")]
 pub enum PasteOutcome {
     Pasted,
+    // 只有 macOS 會判定目標已換；Windows 建置不建構這個值
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     TargetChanged,
     TargetUnavailable,
 }
