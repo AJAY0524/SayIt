@@ -1,9 +1,12 @@
 pub mod audio_control;
 pub mod audio_recorder;
 pub mod clipboard_paste;
+#[cfg(target_os = "macos")]
+pub mod focus_target;
 pub mod hotkey_listener;
 pub mod keyboard_monitor;
 pub mod logging;
+pub mod recent_tray;
 pub mod sound_feedback;
 pub mod text_field_reader;
 pub mod transcription;

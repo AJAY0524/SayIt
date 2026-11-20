@@ -1,21 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockCheck = vi.fn();
-const mockInvoke = vi.fn().mockResolvedValue(undefined);
+const mockOpen = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@tauri-apps/plugin-updater", () => ({
   check: mockCheck,
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: mockInvoke,
+vi.mock("@tauri-apps/plugin-shell", () => ({
+  open: mockOpen,
 }));
 
 describe("autoUpdater.ts", () => {
   beforeEach(() => {
     vi.resetModules();
     mockCheck.mockReset();
-    mockInvoke.mockReset().mockResolvedValue(undefined);
+    mockOpen.mockReset().mockResolvedValue(undefined);
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -62,8 +62,8 @@ describe("autoUpdater.ts", () => {
     );
   });
 
-  it("[P0] downloadUpdate 應只下載不安裝", async () => {
-    const mockDownload = vi.fn().mockResolvedValue(undefined);
+  it("[P0] fork 自建版：發現新版只回報版本，不下載也不安裝", async () => {
+    const mockDownload = vi.fn();
     const mockInstall = vi.fn();
     mockCheck.mockResolvedValue({
       version: "1.2.0",
@@ -71,83 +71,29 @@ describe("autoUpdater.ts", () => {
       install: mockInstall,
     });
 
-    const { checkForAppUpdate, downloadUpdate } = await import(
-      "../../src/lib/autoUpdater"
-    );
-    await checkForAppUpdate();
-    await downloadUpdate();
+    const autoUpdater = await import("../../src/lib/autoUpdater");
+    const result = await autoUpdater.checkForAppUpdate();
 
-    expect(mockDownload).toHaveBeenCalledOnce();
+    expect(result).toEqual({ status: "update-available", version: "1.2.0" });
+    expect(mockDownload).not.toHaveBeenCalled();
     expect(mockInstall).not.toHaveBeenCalled();
-    expect(mockInvoke).not.toHaveBeenCalled();
+    // 模組不再提供任何安裝入口，避免上游安裝包蓋掉 fork 自訂功能
+    expect(autoUpdater).not.toHaveProperty("downloadUpdate");
+    expect(autoUpdater).not.toHaveProperty("installAndRelaunch");
+    expect(autoUpdater).not.toHaveProperty("downloadInstallAndRelaunch");
   });
 
-  it("[P0] installAndRelaunch 應安裝並重啟", async () => {
-    const mockDownload = vi.fn().mockResolvedValue(undefined);
-    const mockInstall = vi.fn().mockResolvedValue(undefined);
-    mockCheck.mockResolvedValue({
-      version: "1.2.0",
-      download: mockDownload,
-      install: mockInstall,
-    });
-
-    const { checkForAppUpdate, downloadUpdate, installAndRelaunch } =
-      await import("../../src/lib/autoUpdater");
-    await checkForAppUpdate();
-    await downloadUpdate();
-    await installAndRelaunch();
-
-    expect(mockInstall).toHaveBeenCalledOnce();
-    expect(mockInvoke).toHaveBeenCalledWith("request_app_restart");
-  });
-
-  it("[P0] downloadInstallAndRelaunch 應一鍵完成", async () => {
-    const mockDownload = vi.fn().mockResolvedValue(undefined);
-    const mockInstall = vi.fn().mockResolvedValue(undefined);
-    mockCheck.mockResolvedValue({
-      version: "1.2.0",
-      download: mockDownload,
-      install: mockInstall,
-    });
-
-    const { checkForAppUpdate, downloadInstallAndRelaunch } = await import(
+  it("[P0] openUpstreamRelease 開啟上游對應版本的 release 頁", async () => {
+    const { openUpstreamRelease, getUpstreamReleaseUrl } = await import(
       "../../src/lib/autoUpdater"
     );
-    await checkForAppUpdate();
-    await downloadInstallAndRelaunch();
+    await openUpstreamRelease("0.14.3");
 
-    expect(mockDownload).toHaveBeenCalledOnce();
-    expect(mockInstall).toHaveBeenCalledOnce();
-    expect(mockInvoke).toHaveBeenCalledWith("request_app_restart");
-  });
-
-  it("[P0] 無暫存更新時 downloadUpdate 應拋錯", async () => {
-    mockCheck.mockResolvedValue(null);
-
-    const { checkForAppUpdate, downloadUpdate } = await import(
-      "../../src/lib/autoUpdater"
+    expect(mockOpen).toHaveBeenCalledWith(
+      "https://github.com/chenjackle45/SayIt/releases/tag/v0.14.3",
     );
-    await checkForAppUpdate();
-
-    await expect(downloadUpdate()).rejects.toThrow("No pending update");
-  });
-
-  it("[P0] 下載失敗時 downloadUpdate 應拋錯", async () => {
-    const mockDownload = vi
-      .fn()
-      .mockRejectedValue(new Error("Download failed"));
-    mockCheck.mockResolvedValue({
-      version: "1.2.0",
-      download: mockDownload,
-      install: vi.fn(),
-    });
-
-    const { checkForAppUpdate, downloadUpdate } = await import(
-      "../../src/lib/autoUpdater"
+    expect(getUpstreamReleaseUrl("")).toBe(
+      "https://github.com/chenjackle45/SayIt/releases",
     );
-    await checkForAppUpdate();
-
-    await expect(downloadUpdate()).rejects.toThrow("Download failed");
-    expect(mockInvoke).not.toHaveBeenCalled();
   });
 });

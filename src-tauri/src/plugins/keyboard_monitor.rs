@@ -127,9 +127,7 @@ fn emit_quality_result<R: Runtime>(app_handle: &AppHandle<R>, was_modified: bool
     let payload = QualityMonitorResultPayload { was_modified };
     let _ = app_handle.emit("quality-monitor:result", payload);
     #[cfg(debug_assertions)]
-    log::info!(
-        "[keyboard-monitor] Emitted quality result: wasModified={was_modified}"
-    );
+    log::info!("[keyboard-monitor] Emitted quality result: wasModified={was_modified}");
 }
 
 fn emit_correction_result<R: Runtime>(
@@ -180,19 +178,18 @@ fn run_persistent_event_tap(
         CGEventTapOptions::ListenOnly,
         vec![CGEventType::KeyDown],
         move |_proxy, _event_type, event| {
-            let keycode = event.get_integer_value_field(
-                core_graphics::event::EventField::KEYBOARD_EVENT_KEYCODE,
-            ) as u16;
+            let keycode = event
+                .get_integer_value_field(core_graphics::event::EventField::KEYBOARD_EVENT_KEYCODE)
+                as u16;
 
             // Quality monitor logic (unchanged)
             if is_monitoring.load(Ordering::SeqCst)
-                && (keycode == macos_keycodes::BACKSPACE || keycode == macos_keycodes::DELETE) {
-                    was_modified.store(true, Ordering::SeqCst);
-                    #[cfg(debug_assertions)]
-                    log::info!(
-                        "[keyboard-monitor] Quality: detected modify key: keycode={keycode}"
-                    );
-                }
+                && (keycode == macos_keycodes::BACKSPACE || keycode == macos_keycodes::DELETE)
+            {
+                was_modified.store(true, Ordering::SeqCst);
+                #[cfg(debug_assertions)]
+                log::info!("[keyboard-monitor] Quality: detected modify key: keycode={keycode}");
+            }
 
             // Correction monitor logic (independent)
             if correction_monitoring.load(Ordering::SeqCst) {
@@ -297,7 +294,9 @@ fn run_persistent_hook(
 
                     // Correction monitor logic (independent)
                     if state.correction_monitoring.load(Ordering::SeqCst) {
-                        state.correction_any_key_pressed.store(true, Ordering::SeqCst);
+                        state
+                            .correction_any_key_pressed
+                            .store(true, Ordering::SeqCst);
                         if let Ok(mut t) = state.correction_last_key_time.lock() {
                             *t = Instant::now();
                         }
@@ -329,7 +328,10 @@ fn run_persistent_hook(
                 log::info!("[keyboard-monitor] Persistent Windows hook removed");
             }
             Err(e) => {
-                log::error!("[keyboard-monitor] Failed to install persistent hook: {}", e);
+                log::error!(
+                    "[keyboard-monitor] Failed to install persistent hook: {}",
+                    e
+                );
             }
         }
     }
@@ -364,11 +366,8 @@ pub fn start_quality_monitor<R: Runtime>(app: AppHandle<R>) {
     let cancel_token = state.cancel_token.clone();
 
     std::thread::spawn(move || {
-        let cancelled = wait_with_cancellation(
-            &cancel_token,
-            MONITOR_DURATION_MS,
-            CANCEL_CHECK_INTERVAL_MS,
-        );
+        let cancelled =
+            wait_with_cancellation(&cancel_token, MONITOR_DURATION_MS, CANCEL_CHECK_INTERVAL_MS);
         if cancelled {
             #[cfg(debug_assertions)]
             log::info!("[keyboard-monitor] Quality monitoring cancelled");
@@ -401,9 +400,7 @@ pub fn start_correction_monitor<R: Runtime>(app: AppHandle<R>) {
         *t = Instant::now();
     }
     state.correction_monitoring.store(true, Ordering::SeqCst);
-    state
-        .correction_cancel_token
-        .store(false, Ordering::SeqCst);
+    state.correction_cancel_token.store(false, Ordering::SeqCst);
 
     #[cfg(debug_assertions)]
     log::info!("[keyboard-monitor] Starting correction monitor");

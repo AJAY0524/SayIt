@@ -352,7 +352,11 @@
     "retryFailed": "识别失败，请重新录音",
     "cancelled": "已取消",
     "modeSwitched": "已切换至{mode}模式",
-    "commandMode": "指令"
+    "commandMode": "指令",
+    "targetChanged": "输入位置已改变，尚未粘贴",
+    "pasteBack": "贴回原位置",
+    "pasteBackFailed": "无法切回原位置，可从菜单栏「最近记录」复制",
+    "cancelRecording": "取消录音"
   },
   "errors": {
     "databaseInitFailed": "数据库初始化失败，历史记录暂时无法使用。请重新启动应用程序。",
@@ -438,11 +442,21 @@
       "newVersionTitle": "发现新版本",
       "newVersionDescription": "SayIt v{version} 已可供更新。点击开始更新将自动下载并重新启动应用程序。",
       "cancel": "取消",
-      "startUpdate": "开始更新"
+      "startUpdate": "开始更新",
+      "fork": {
+        "title": "上游发布了 SayIt v{version}",
+        "description": "这是你的自建版，不会自动安装上游安装包（会覆盖自定义功能）。请先查看更新内容，再请 Claude 同步上游并重建安装。",
+        "viewRelease": "查看更新内容",
+        "sidebarBadge": "上游 v{version}",
+        "openFailed": "无法打开上游发布页"
+      }
     },
     "upgradeNotice": {
       "title": "SayIt 更新摘要",
-      "item1": "Windows 录制自定义触发键不用再先点别的窗口：之前设置窗口在前台时按什么都录不到，现在直接在 SayIt 窗口里按就能录",
+      "item1": "Windows 用 Alt／Shift 触发不再多打一个 C：选中文字也能正常进入编辑模式，粘贴时不会再打开菜单栏",
+      "item2": "AI 整理更稳定：说中文不会再被误判为差异过大、不会被翻译成界面语言；词典中手动添加的词会优先使用",
+      "item3": "AI 模型列表更新：Groq、Gemini 的默认模型换成较新的版本，原来选择的模型若已下线会自动换成同一家的替代模型；OpenAI、Anthropic 新增更便宜的新模型",
+      "item4": "Anthropic（Claude）恢复可用：之前密钥正确却显示“无效或已过期”、AI 整理一直退回原文，现在测试连接和整理都能正常运作",
       "dismiss": "了解"
     }
   },

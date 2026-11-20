@@ -352,7 +352,11 @@
     "retryFailed": "Recognition failed, please record again",
     "cancelled": "Cancelled",
     "modeSwitched": "Switched to {mode} mode",
-    "commandMode": "Command"
+    "commandMode": "Command",
+    "targetChanged": "Input target changed — not pasted",
+    "pasteBack": "Paste back",
+    "pasteBackFailed": "Couldn't return to the original field. Copy it from Recent in the menu bar",
+    "cancelRecording": "Cancel recording"
   },
   "errors": {
     "databaseInitFailed": "Database initialization failed. History is temporarily unavailable. Please restart the app.",
@@ -438,11 +442,21 @@
       "newVersionTitle": "New Version Available",
       "newVersionDescription": "SayIt v{version} is available. Click Start Update to download and restart the application automatically.",
       "cancel": "Cancel",
-      "startUpdate": "Start Update"
+      "startUpdate": "Start Update",
+      "fork": {
+        "title": "Upstream released SayIt v{version}",
+        "description": "This is your custom build, so the upstream installer is not installed automatically (it would replace your custom features). Review the release notes, then ask Claude to sync upstream and rebuild.",
+        "viewRelease": "View release notes",
+        "sidebarBadge": "Upstream v{version}",
+        "openFailed": "Could not open the upstream release page"
+      }
     },
     "upgradeNotice": {
       "title": "What's New in SayIt",
-      "item1": "Recording a custom trigger key on Windows no longer requires clicking another window first — with the SayIt window in front, nothing used to register; now you can press the key right in SayIt",
+      "item1": "Triggering with Alt or Shift on Windows no longer types a stray C — selected text now enters Edit mode as expected, and pasting no longer opens the menu bar",
+      "item2": "More reliable AI cleanup — speaking Chinese is no longer flagged as \"too different\" or translated into the interface language, and words you add to the dictionary yourself now take priority",
+      "item3": "Updated AI model list — Groq and Gemini now default to newer models, and if your chosen model was retired you're moved to a replacement from the same provider; OpenAI and Anthropic gain newer, cheaper models",
+      "item4": "Anthropic (Claude) works again — a valid key used to show \"invalid or expired\" and AI cleanup kept falling back to the original text; connection tests and cleanup now work normally",
       "dismiss": "Got it"
     }
   },

@@ -102,6 +102,14 @@ function handleRetry() {
   void voiceFlowStore.handleRetryTranscription();
 }
 
+function handlePasteBack() {
+  void voiceFlowStore.handlePasteBack();
+}
+
+function handleCancelRecording() {
+  voiceFlowStore.cancelRecording();
+}
+
 onUnmounted(() => {
   unlistenSettingsUpdated?.();
   unlistenVocabularyChanged?.();
@@ -119,7 +127,10 @@ onUnmounted(() => {
       :prompt-mode-label="promptModeLabel"
       :mode-switch-label="voiceFlowStore.modeSwitchLabel"
       :is-edit-mode="voiceFlowStore.isEditMode"
+      :can-paste-back="voiceFlowStore.canPasteBack"
       @retry="handleRetry"
+      @paste-back="handlePasteBack"
+      @cancel="handleCancelRecording"
     />
   </div>
 </template>

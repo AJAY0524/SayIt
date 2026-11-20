@@ -89,8 +89,8 @@ paths:
 
 ## 自動更新機制
 
-- **定時檢查** — `main-window.ts`：啟動 5 秒後首次檢查，之後每 4 小時（`setInterval`）
+- **Fork 自建版只通知、不安裝（2026-11-20 起，fork 自訂）** — `autoUpdater.ts` 只保留 `checkForAppUpdate()` 與開上游 release 頁的 `openUpstreamRelease()`，下載／安裝／重啟函式已移除；`MainApp.vue` 發現新版時顯示「上游發布了 SayIt vX」對話框與 sidebar 提示。來源仍是 `tauri.conf.json` 的上游 `latest.json`。**不要把安裝路徑加回來**：上游安裝包會蓋掉 fork 的自訂功能。收到通知後的流程是 `git fetch upstream` → `git merge upstream/main` → 測試 → `scripts/build-install-local.zsh`
+- **定時檢查** — `MainApp.vue`：啟動 5 秒後首次檢查，之後每 15 分鐘（`setInterval`）；通知過一次後到重啟前不再重複彈窗
 - **手動檢查** — `MainApp.vue` Sidebar Footer「檢查更新」按鈕，結果用 `useFeedbackMessage` 顯示
 - **回傳型別** — `checkForAppUpdate()` → `Promise<UpdateCheckResult>`（`up-to-date` | `update-available` | `error`）
-- **已知限制** — `autoUpdater.ts` 中 `window.confirm` 在 Tauri WKWebView 會被靜默忽略，未來需改用 in-app UI
 - 更新後首次開 Dashboard 會彈「更新摘要」（`upgradeNotice`，五語系），發版時要換內容（見 `.claude/rules/i18n.md`）

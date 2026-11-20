@@ -7,16 +7,15 @@ export const DEFAULT_LLM_PROVIDER_ID: LlmProviderId = "groq";
 // ── LLM 模型（文字整理用）────────────────────────────────
 
 export type LlmModelId =
-  | "qwen/qwen3.6-27b"
+  | "qwen/qwen3.8-27b"
   | "openai/gpt-oss-120b"
   | "openai/gpt-oss-20b"
+  | "gpt-6-luna"
   | "gpt-5.6-luna"
-  | "gpt-5.4-nano"
   | "claude-haiku-5-5"
-  | "claude-sonnet-5-5"
   | "claude-haiku-4-5-20251001"
-  | "gemini-3.5-flash"
-  | "gemini-3.1-flash-lite";
+  | "gemini-3.5-flash-lite"
+  | "gemini-3.6-flash";
 
 // ── Whisper 模型（語音轉錄用）─────────────────────────────
 
@@ -58,7 +57,7 @@ export interface WhisperModelConfig {
 
 // ── 預設值 ────────────────────────────────────────────────
 
-export const DEFAULT_LLM_MODEL_ID: LlmModelId = "qwen/qwen3.6-27b";
+export const DEFAULT_LLM_MODEL_ID: LlmModelId = "qwen/qwen3.8-27b";
 export const DEFAULT_WHISPER_MODEL_ID: WhisperModelId = "whisper-large-v3";
 
 // ── 已下架模型 ID 映射（舊 → 新，用於自動遷移）──────────
@@ -78,13 +77,22 @@ export const DECOMMISSIONED_MODEL_MAP: Record<string, string> = {
   "meta-llama/llama-4-maverick-17b-128e-instruct": "qwen/qwen3.6-27b",
   "llama-3.1-8b-instant": "openai/gpt-oss-20b",
   "gpt-oss-120b": "openai/gpt-oss-120b",
+  // Groq — qwen3.6 free／developer 層 2026-09-14 下架
+  "qwen/qwen3.6-27b": "qwen/qwen3.8-27b",
   // Gemini — 2.5 世代汰換
   "gemini-2.5-flash": "gemini-3.5-flash",
   "gemini-2.5-flash-lite": "gemini-3.1-flash-lite",
+  // Gemini — 3.5-flash 已被官方自動轉到 3.6-flash；3.1-flash-lite 官方替代 3.5-flash-lite
+  "gemini-3.5-flash": "gemini-3.6-flash",
+  "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
   // OpenAI
   "gpt-5.4-mini": "gpt-5.6-luna",
+  // OpenAI — 5.4-nano 2027-04-01 下架，官方替代 6-luna
+  "gpt-5.4-nano": "gpt-6-luna",
   // Anthropic — 3.5 Haiku 已於 2026-02-19 退役
   "claude-3-5-haiku-20241022": "claude-haiku-4-5-20251001",
+  // Anthropic — fork 自加的 Sonnet 5.5 已移除（文字整理用不到、成本高），舊設定轉到 Haiku 5.5
+  "claude-sonnet-5-5": "claude-haiku-5-5",
 };
 
 // ── 模型清單 ──────────────────────────────────────────────
@@ -93,14 +101,14 @@ export const LLM_MODEL_LIST: LlmModelConfig[] = [
   // ── Groq（免費）──
   {
     // Preview 模型：Groq 可無預警下架，顯示名稱標明讓使用者知情
-    id: "qwen/qwen3.6-27b",
+    id: "qwen/qwen3.8-27b",
     providerId: "groq",
     freeTier: "full",
-    displayName: "Qwen3.6 27B (Preview)",
+    displayName: "Qwen3.8 27B (Preview)",
     badgeKey: "settings.modelBadge.balanced",
     speedTps: 500,
-    inputCostPerMillion: 0.6,
-    outputCostPerMillion: 3.0,
+    inputCostPerMillion: 0.8,
+    outputCostPerMillion: 4.0,
     freeQuotaRpd: 1_000,
     freeQuotaTpd: 200_000,
     isDefault: true,
@@ -133,32 +141,48 @@ export const LLM_MODEL_LIST: LlmModelConfig[] = [
   },
   // ── Google Gemini（免費額度依帳號而異，不在此顯示）──
   {
-    id: "gemini-3.5-flash",
+    id: "gemini-3.5-flash-lite",
     providerId: "gemini",
-    freeTier: "limited",
-    displayName: "Gemini 3.5 Flash",
-    badgeKey: "settings.modelBadge.premium",
+    freeTier: "full",
+    displayName: "Gemini 3.5 Flash-Lite",
+    badgeKey: "settings.modelBadge.fastCheap",
     speedTps: 0,
-    inputCostPerMillion: 1.5,
-    outputCostPerMillion: 9.0,
+    inputCostPerMillion: 0.3,
+    outputCostPerMillion: 2.5,
     freeQuotaRpd: 0,
     freeQuotaTpd: 0,
     isDefault: true,
   },
   {
-    id: "gemini-3.1-flash-lite",
+    // freeTier 沿用 3.5-flash 的分類：3.5-flash 請求實際已被轉到這顆
+    // 價格取官方公告 2027-01-01 起的 $1.50/$7.50（之前為 $0.75/$3.75）：
+    // 出貨後多數時間落在漲價後，且費用上限寧可高估
+    id: "gemini-3.6-flash",
     providerId: "gemini",
-    freeTier: "full",
-    displayName: "Gemini 3.1 Flash-Lite",
-    badgeKey: "settings.modelBadge.fastCheap",
+    freeTier: "limited",
+    displayName: "Gemini 3.6 Flash",
+    badgeKey: "settings.modelBadge.premium",
     speedTps: 0,
-    inputCostPerMillion: 0.25,
-    outputCostPerMillion: 1.5,
+    inputCostPerMillion: 1.5,
+    outputCostPerMillion: 7.5,
     freeQuotaRpd: 0,
     freeQuotaTpd: 0,
     isDefault: false,
   },
   // ── OpenAI（付費）──
+  {
+    id: "gpt-6-luna",
+    providerId: "openai",
+    freeTier: "none",
+    displayName: "GPT-6 Luna",
+    badgeKey: "settings.modelBadge.fastCheap",
+    speedTps: 0,
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.5,
+    freeQuotaRpd: 0,
+    freeQuotaTpd: 0,
+    isDefault: true,
+  },
   {
     id: "gpt-5.6-luna",
     providerId: "openai",
@@ -166,29 +190,14 @@ export const LLM_MODEL_LIST: LlmModelConfig[] = [
     displayName: "GPT-5.6 Luna",
     badgeKey: "settings.modelBadge.premium",
     speedTps: 0,
-    inputCostPerMillion: 1.0,
-    outputCostPerMillion: 6.0,
-    freeQuotaRpd: 0,
-    freeQuotaTpd: 0,
-    isDefault: true,
-  },
-  {
-    id: "gpt-5.4-nano",
-    providerId: "openai",
-    freeTier: "none",
-    displayName: "GPT-5.4 Nano",
-    badgeKey: "settings.modelBadge.fastCheap",
-    speedTps: 0,
     inputCostPerMillion: 0.2,
-    outputCostPerMillion: 1.25,
+    outputCostPerMillion: 1.2,
     freeQuotaRpd: 0,
     freeQuotaTpd: 0,
     isDefault: false,
   },
   // ── Anthropic（付費）──
   {
-    // 提示 ≤100K token 的價格；5.5 世代不接受 temperature，且預設啟用思考
-    // （請求組裝見 llmProvider.ts 的 buildAnthropicFetchParams）
     id: "claude-haiku-5-5",
     providerId: "anthropic",
     freeTier: "none",
@@ -202,24 +211,11 @@ export const LLM_MODEL_LIST: LlmModelConfig[] = [
     isDefault: true,
   },
   {
-    id: "claude-sonnet-5-5",
-    providerId: "anthropic",
-    freeTier: "none",
-    displayName: "Claude Sonnet 5.5",
-    badgeKey: "settings.modelBadge.premium",
-    speedTps: 0,
-    inputCostPerMillion: 2.0,
-    outputCostPerMillion: 10.0,
-    freeQuotaRpd: 0,
-    freeQuotaTpd: 0,
-    isDefault: false,
-  },
-  {
     id: "claude-haiku-4-5-20251001",
     providerId: "anthropic",
     freeTier: "none",
     displayName: "Claude Haiku 4.5",
-    badgeKey: "settings.modelBadge.stableCostly",
+    badgeKey: "settings.modelBadge.premium",
     speedTps: 0,
     inputCostPerMillion: 1.0,
     outputCostPerMillion: 5.0,
